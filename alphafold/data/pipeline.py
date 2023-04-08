@@ -56,6 +56,7 @@ def make_msa_features(msas: Sequence[parsers.Msa]) -> FeatureDict:
     raise ValueError('At least one MSA must be provided.')
 
   int_msa = []
+  seq_msa=[]
   deletion_matrix = []
   species_ids = []
   seen_sequences = set()
@@ -68,6 +69,7 @@ def make_msa_features(msas: Sequence[parsers.Msa]) -> FeatureDict:
       seen_sequences.add(sequence)
       int_msa.append(
           [residue_constants.HHBLITS_AA_TO_ID[res] for res in sequence])
+      seq_msa.append(sequence)
       deletion_matrix.append(msa.deletion_matrix[sequence_index])
       identifiers = msa_identifiers.get_identifiers(
           msa.descriptions[sequence_index])
@@ -75,12 +77,11 @@ def make_msa_features(msas: Sequence[parsers.Msa]) -> FeatureDict:
 
   num_res = len(msas[0].sequences[0])
   num_alignments = len(int_msa)
-  features = {}
-  features['deletion_matrix_int'] = np.array(deletion_matrix, dtype=np.int32)
-  features['msa'] = np.array(int_msa, dtype=np.int32)
-  features['num_alignments'] = np.array(
-      [num_alignments] * num_res, dtype=np.int32)
-  features['msa_species_identifiers'] = np.array(species_ids, dtype=np.object_)
+  features = {'deletion_matrix_int': np.array(deletion_matrix, dtype=np.int32),
+              'msa': np.array(int_msa, dtype=np.int32),
+              'seq_msa': np.array(seq_msa, dtype=np.object_),
+              'num_alignments': np.array([num_alignments] * num_res, dtype=np.int32),
+              'msa_species_identifiers': np.array(species_ids, dtype=np.object_)}
   return features
 
 
@@ -211,7 +212,7 @@ class DataPipeline:
           use_precomputed_msas=self.use_precomputed_msas)
       bfd_msa = parsers.parse_stockholm(jackhmmer_small_bfd_result['sto'])
     else:
-      bfd_out_path = os.path.join(msa_output_dir, 'bfd_uniref_hits.a3m')
+      bfd_out_path = os.path.join(msa_output_dir, 'bfd_uniclust_hits.a3m')
       hhblits_bfd_uniref_result = run_msa_tool(
           msa_runner=self.hhblits_bfd_uniref_runner,
           input_fasta_path=input_fasta_path,
@@ -220,9 +221,9 @@ class DataPipeline:
           use_precomputed_msas=self.use_precomputed_msas)
       bfd_msa = parsers.parse_a3m(hhblits_bfd_uniref_result['a3m'])
 
-    templates_result = self.template_featurizer.get_templates(
-        query_sequence=input_sequence,
-        hits=pdb_template_hits)
+    # templates_result = self.template_featurizer.get_templates(
+    #     query_sequence=input_sequence,
+    #     hits=pdb_template_hits)
 
     sequence_features = make_sequence_features(
         sequence=input_sequence,
@@ -236,8 +237,8 @@ class DataPipeline:
     logging.info('MGnify MSA size: %d sequences.', len(mgnify_msa))
     logging.info('Final (deduplicated) MSA size: %d sequences.',
                  msa_features['num_alignments'][0])
-    logging.info('Total number of templates (NB: this can include bad '
-                 'templates and is later filtered to top 4): %d.',
-                 templates_result.features['template_domain_names'].shape[0])
+    # logging.info('Total number of templates (NB: this can include bad '
+    #              'templates and is later filtered to top 4): %d.',
+    #              templates_result.features['template_domain_names'].shape[0])
 
-    return {**sequence_features, **msa_features, **templates_result.features}
+    return {**sequence_features, **msa_features,} # **templates_result.features}
