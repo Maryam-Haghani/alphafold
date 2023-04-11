@@ -220,7 +220,7 @@ def predict_structure(
   timings['features'] = time.time() - t_0
 
   # Write out features as a pickled dictionary.
-  features_output_path = os.path.join(output_dir, 'features.pkl')
+  features_output_path = os.path.join(os.path.join(msa_output_dir, 'Changed'), 'features.pkl')
   with open(features_output_path, 'wb') as f:
     pickle.dump(feature_dict, f, protocol=4)
 
@@ -488,7 +488,7 @@ def main(argv):
         random_seed=random_seed,
         models_to_relax=FLAGS.models_to_relax)
 
-
+print("*************************END******************************8")
 if __name__ == '__main__':
   flags.mark_flags_as_required([
       'fasta_paths',

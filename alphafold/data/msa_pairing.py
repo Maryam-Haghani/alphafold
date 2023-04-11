@@ -71,7 +71,7 @@ def create_paired_features(
     return chains
   else:
     updated_chains = []
-    os.makedirs(f"{msa_output_dir}/Changed/")
+    os.makedirs(f"{msa_output_dir}/Changed/", exist_ok=True)
     paired_chains_to_paired_row_indices = pair_sequences(chains, msa_output_dir)
     paired_rows = reorder_paired_rows(
         paired_chains_to_paired_row_indices)
