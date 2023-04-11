@@ -59,42 +59,63 @@ flags.DEFINE_list(
     'separated by commas. All FASTA paths must have a unique basename as the '
     'basename is used to name the output directories for each prediction.')
 
+data_dir = "/global/biodatabases/alphafold"
+
+DOWNLOAD_DIR= data_dir
+uniprot_database_path = os.path.join(
+    DOWNLOAD_DIR, 'uniprot',    'uniprot.fasta')
+uniref90_database_path = os.path.join(
+    DOWNLOAD_DIR, 'uniref90', 'uniref90.fasta')
+mgnify_database_path = os.path.join(
+    DOWNLOAD_DIR, 'mgnify', 'mgy_clusters.fa')
+small_bfd_database_path = os.path.join(
+    DOWNLOAD_DIR, 'small_bfd',    'bfd-first_non_consensus_sequences.fasta')
+bfd_database_path = os.path.join(
+    DOWNLOAD_DIR, 'bfd',    'bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt')
+uniclust30_database_path = os.path.join(
+    DOWNLOAD_DIR, 'uniclust30', 'uniclust30_2018_08', 'uniclust30_2018_08')
+pdb70_database_path = os.path.join(DOWNLOAD_DIR, 'pdb70', 'pdb70')
+template_mmcif_dir = os.path.join(DOWNLOAD_DIR, 'pdb_mmcif', 'mmcif_files')
+obsolete_pdbs_path = os.path.join(DOWNLOAD_DIR, 'pdb_mmcif', 'obsolete.dat')
+pdb_seqres_database_path=os.path.join(DOWNLOAD_DIR, 'pdb_seqres', 'pdb_seqres.txt')
+binary_path = '/home/haghani/.conda/envs/alphafold/bin/'
+
 flags.DEFINE_string('data_dir', None, 'Path to directory of supporting data.')
 flags.DEFINE_string('output_dir', None, 'Path to a directory that will '
                     'store the results.')
-flags.DEFINE_string('jackhmmer_binary_path', shutil.which('jackhmmer'),
+flags.DEFINE_string('jackhmmer_binary_path', binary_path+'jackhmmer',
                     'Path to the JackHMMER executable.')
-flags.DEFINE_string('hhblits_binary_path', shutil.which('hhblits'),
+flags.DEFINE_string('hhblits_binary_path', binary_path+'hhblits',
                     'Path to the HHblits executable.')
-flags.DEFINE_string('hhsearch_binary_path', shutil.which('hhsearch'),
+flags.DEFINE_string('hhsearch_binary_path', binary_path+'hhsearch',
                     'Path to the HHsearch executable.')
-flags.DEFINE_string('hmmsearch_binary_path', shutil.which('hmmsearch'),
+flags.DEFINE_string('hmmsearch_binary_path', binary_path+'hmmsearch',
                     'Path to the hmmsearch executable.')
-flags.DEFINE_string('hmmbuild_binary_path', shutil.which('hmmbuild'),
+flags.DEFINE_string('hmmbuild_binary_path', binary_path+'hmmbuild',
                     'Path to the hmmbuild executable.')
-flags.DEFINE_string('kalign_binary_path', shutil.which('kalign'),
+flags.DEFINE_string('kalign_binary_path', binary_path+'kalign',
                     'Path to the Kalign executable.')
-flags.DEFINE_string('uniref90_database_path', None, 'Path to the Uniref90 '
+flags.DEFINE_string('uniref90_database_path', uniref90_database_path, 'Path to the Uniref90 '
                     'database for use by JackHMMER.')
-flags.DEFINE_string('mgnify_database_path', None, 'Path to the MGnify '
+flags.DEFINE_string('mgnify_database_path', mgnify_database_path, 'Path to the MGnify '
                     'database for use by JackHMMER.')
-flags.DEFINE_string('bfd_database_path', None, 'Path to the BFD '
+flags.DEFINE_string('bfd_database_path', bfd_database_path , 'Path to the BFD '
                     'database for use by HHblits.')
 flags.DEFINE_string('small_bfd_database_path', None, 'Path to the small '
                     'version of BFD used with the "reduced_dbs" preset.')
-flags.DEFINE_string('uniref30_database_path', None, 'Path to the UniRef30 '
+flags.DEFINE_string('uniref30_database_path', uniclust30_database_path, 'Path to the UniRef30 '
                     'database for use by HHblits.')
-flags.DEFINE_string('uniprot_database_path', None, 'Path to the Uniprot '
+flags.DEFINE_string('uniprot_database_path', uniprot_database_path, 'Path to the Uniprot '
                     'database for use by JackHMMer.')
 flags.DEFINE_string('pdb70_database_path', None, 'Path to the PDB70 '
                     'database for use by HHsearch.')
-flags.DEFINE_string('pdb_seqres_database_path', None, 'Path to the PDB '
+flags.DEFINE_string('pdb_seqres_database_path', pdb_seqres_database_path, 'Path to the PDB '
                     'seqres database for use by hmmsearch.')
-flags.DEFINE_string('template_mmcif_dir', None, 'Path to a directory with '
+flags.DEFINE_string('template_mmcif_dir', template_mmcif_dir, 'Path to a directory with '
                     'template mmCIF structures, each named <pdb_id>.cif')
 flags.DEFINE_string('max_template_date', None, 'Maximum template release date '
                     'to consider. Important if folding historical test sets.')
-flags.DEFINE_string('obsolete_pdbs_path', None, 'Path to file containing a '
+flags.DEFINE_string('obsolete_pdbs_path',obsolete_pdbs_path , 'Path to file containing a '
                     'mapping from obsolete PDB IDs to the PDB IDs of their '
                     'replacements.')
 flags.DEFINE_enum('db_preset', 'full_dbs',
@@ -121,7 +142,7 @@ flags.DEFINE_integer('num_multimer_predictions_per_model', 5, 'How many '
                      'generated per model. E.g. if this is 2 and there are 5 '
                      'models then there will be 10 predictions per input. '
                      'Note: this FLAG only applies if model_preset=multimer')
-flags.DEFINE_boolean('use_precomputed_msas', False, 'Whether to read MSAs that '
+flags.DEFINE_boolean('use_precomputed_msas', True, 'Whether to read MSAs that '
                      'have been written to disk instead of running the MSA '
                      'tools. The MSA files are looked up in the output '
                      'directory, so it must stay the same between multiple '
@@ -137,11 +158,10 @@ flags.DEFINE_enum_class('models_to_relax', ModelsToRelax.BEST, ModelsToRelax,
                         'distracting stereochemical violations but might help '
                         'in case you are having issues with the relaxation '
                         'stage.')
-flags.DEFINE_boolean('use_gpu_relax', None, 'Whether to relax on GPU. '
+flags.DEFINE_boolean('use_gpu_relax', False, 'Whether to relax on GPU. '
                      'Relax on GPU can be much faster than CPU, so it is '
                      'recommended to enable if possible. GPUs must be available'
                      ' if this setting is enabled.')
-
 FLAGS = flags.FLAGS
 
 MAX_TEMPLATE_HITS = 20
@@ -354,6 +374,14 @@ def main(argv):
   else:
     num_ensemble = 1
 
+  is_fasta_path_dir = False
+  # check to get contents of directory as fasta files if it is a dir name:
+  if (FLAGS.fasta_paths)[0].endswith('.fasta'):
+      fasta_names = [pathlib.Path(p).stem for p in FLAGS.fasta_paths]
+  else:
+      fasta_names = [s.strip('.fasta') for s in os.listdir(FLAGS.fasta_paths[0])]
+      is_fasta_path_dir = True
+
   # Check for duplicate FASTA file names.
   fasta_names = [pathlib.Path(p).stem for p in FLAGS.fasta_paths]
   if len(fasta_names) != len(set(fasta_names)):
@@ -438,10 +466,13 @@ def main(argv):
   logging.info('Using random seed %d for the data pipeline', random_seed)
 
   # Predict structure for each of the sequences.
-  for i, fasta_path in enumerate(FLAGS.fasta_paths):
-    fasta_name = fasta_names[i]
+  for fasta_name in fasta_names:
+    if is_fasta_path_dir:
+        path = FLAGS.fasta_paths[0]+'/'+fasta_name+'.fasta'
+    else:
+        path = FLAGS.fasta_paths[0]
     predict_structure(
-        fasta_path=fasta_path,
+        fasta_path=path,
         fasta_name=fasta_name,
         output_dir_base=FLAGS.output_dir,
         data_pipeline=data_pipeline,
