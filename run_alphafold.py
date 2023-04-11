@@ -223,6 +223,8 @@ def predict_structure(
   with open(features_output_path, 'wb') as f:
     pickle.dump(feature_dict, f, protocol=4)
 
+  return
+
   unrelaxed_pdbs = {}
   unrelaxed_proteins = {}
   relaxed_pdbs = {}
@@ -383,7 +385,6 @@ def main(argv):
       is_fasta_path_dir = True
 
   # Check for duplicate FASTA file names.
-  fasta_names = [pathlib.Path(p).stem for p in FLAGS.fasta_paths]
   if len(fasta_names) != len(set(fasta_names)):
     raise ValueError('All FASTA paths must have a unique basename.')
 
@@ -481,6 +482,7 @@ def main(argv):
         benchmark=FLAGS.benchmark,
         random_seed=random_seed,
         models_to_relax=FLAGS.models_to_relax)
+  print("***********************END OF AF****************************8")
 
 
 if __name__ == '__main__':
