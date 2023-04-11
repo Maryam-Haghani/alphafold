@@ -80,7 +80,6 @@ obsolete_pdbs_path = os.path.join(DOWNLOAD_DIR, 'pdb_mmcif', 'obsolete.dat')
 pdb_seqres_database_path=os.path.join(DOWNLOAD_DIR, 'pdb_seqres', 'pdb_seqres.txt')
 binary_path = '/home/haghani/.conda/envs/alphafold/bin/'
 
-
 flags.DEFINE_string('data_dir', None, 'Path to directory of supporting data.')
 flags.DEFINE_string('output_dir', None, 'Path to a directory that will '
                     'store the results.')
@@ -225,6 +224,7 @@ def predict_structure(
   with open(features_output_path, 'wb') as f:
     pickle.dump(feature_dict, f, protocol=4)
 
+  return
   unrelaxed_pdbs = {}
   unrelaxed_proteins = {}
   relaxed_pdbs = {}
@@ -346,6 +346,12 @@ def predict_structure(
 
 
 def main(argv):
+  print("***********************************************")
+  print("***********************************************")
+  print("Running changed code!")
+  print("***********************************************")
+  print("***********************************************")
+
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
@@ -375,12 +381,13 @@ def main(argv):
     num_ensemble = 8
   else:
     num_ensemble = 1
-
+  is_fasta_path_dir = False
   #check to get contents of directory as fasta files if it is a dir name:
   if (FLAGS.fasta_paths)[0].endswith('.fasta'):
       fasta_names = [pathlib.Path(p).stem for p in FLAGS.fasta_paths]
   else:
-      fasta_names = os.listdir(FLAGS.fasta_paths[0])
+      fasta_names = [s.strip('.fasta') for s in os.listdir(FLAGS.fasta_paths[0])]
+      is_fasta_path_dir = True
 
   # Check for duplicate FASTA file names.
   if len(fasta_names) != len(set(fasta_names)):
@@ -465,10 +472,13 @@ def main(argv):
   logging.info('Using random seed %d for the data pipeline', random_seed)
 
   # Predict structure for each of the sequences.
-  for i, fasta_path in enumerate(FLAGS.fasta_paths):
-    fasta_name = fasta_names[i]
+  for fasta_name in fasta_names:
+    if is_fasta_path_dir:
+        path = FLAGS.fasta_paths[0]+'/'+fasta_name+'.fasta'
+    else:
+        path = FLAGS.fasta_paths[0]
     predict_structure(
-        fasta_path=fasta_path+'/'+fasta_name,
+        fasta_path=path,
         fasta_name=fasta_name,
         output_dir_base=FLAGS.output_dir,
         data_pipeline=data_pipeline,

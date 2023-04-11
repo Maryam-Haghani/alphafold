@@ -26,7 +26,7 @@ REQUIRED_FEATURES = frozenset({
     'all_crops_all_chains_mask', 'all_crops_all_chains_positions',
     'all_crops_all_chains_residue_ids', 'assembly_num_chains', 'asym_id',
     'bert_mask', 'cluster_bias_mask', 'deletion_matrix', 'deletion_mean',
-    'entity_id', 'entity_mask', 'mem_peak', 'msa', 'msa_mask', 'num_alignments',
+    'entity_id', 'entity_mask', 'mem_peak', 'msa', 'seq_msa', 'msa_mask', 'num_alignments',
     'num_templates', 'queue_size', 'residue_index', 'resolution',
     'seq_length', 'seq_mask', 'sym_id', 'template_aatype',
     'template_all_atom_mask', 'template_all_atom_positions'
@@ -56,12 +56,11 @@ def pair_and_merge(
       A dictionary of features.
     """
 
-    # process_unmerged_features(all_chain_features)
+    process_unmerged_features(all_chain_features)
 
     np_chains_list = list(all_chain_features.values())
 
-    # pair_msa_sequences = not _is_homomer_or_monomer(np_chains_list)
-    pair_msa_sequences = True
+    pair_msa_sequences = not _is_homomer_or_monomer(np_chains_list)
 
     if pair_msa_sequences:
         np_chains_list = msa_pairing.create_paired_features(
@@ -75,7 +74,15 @@ def pair_and_merge(
     np_example = msa_pairing.merge_chain_features(
       np_chains_list=np_chains_list, pair_msa_sequences=pair_msa_sequences,
       max_templates=MAX_TEMPLATES)
+
+    # add seq_msa to features
+    l = []
+    for msa in np_example['msa']:
+        l.append(np.array([residue_constants.ID_TO_HHBLITS_AA[x] for x in msa]))
+    np_example['seq_msa'] = np.array(l)
+
     np_example = process_final(np_example)
+
     return np_example
 
 

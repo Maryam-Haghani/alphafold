@@ -24,13 +24,13 @@ from alphafold.data import pipeline
 import numpy as np
 import pandas as pd
 import scipy.linalg
+import os
 
 MSA_GAP_IDX = residue_constants.restypes_with_x_and_gap.index('-')
 SEQUENCE_GAP_CUTOFF = 0.5
 SEQUENCE_SIMILARITY_CUTOFF = 0.9
 
 MSA_PAD_VALUES = {'msa_all_seq': MSA_GAP_IDX,
-                  'seq_msa_all_seq': '-',
                   'msa_mask_all_seq': 1,
                   'deletion_matrix_all_seq': 0,
                   'deletion_matrix_int_all_seq': 0,
@@ -71,6 +71,7 @@ def create_paired_features(
     return chains
   else:
     updated_chains = []
+    os.makedirs(f"{msa_output_dir}/Changed/")
     paired_chains_to_paired_row_indices = pair_sequences(chains, msa_output_dir)
     paired_rows = reorder_paired_rows(
         paired_chains_to_paired_row_indices)
@@ -101,12 +102,9 @@ def pad_features(feature: np.ndarray, feature_name: str) -> np.ndarray:
     The feature with an additional padding row.
   """
   assert feature.dtype != np.dtype(np.string_)
-  if feature_name in ('msa_all_seq', 'msa_mask_all_seq',# 'seq_msa_all_seq',
+  if feature_name in ('msa_all_seq', 'msa_mask_all_seq'
                       'deletion_matrix_all_seq', 'deletion_matrix_int_all_seq'):
-    if feature_name == 'seq_msa_all_seq':
-        num_res = len(feature[0])
-    else:
-        num_res = feature.shape[1]
+    num_res = feature.shape[1]
     padding = MSA_PAD_VALUES[feature_name] * np.ones([1, num_res],
                                                      feature.dtype)
   elif feature_name == 'msa_species_identifiers_all_seq':
@@ -152,7 +150,7 @@ def _make_msa_df(chain_features: pipeline.FeatureDict, msa_output_dir, method) -
       'msa_similarity': per_seq_similarity,
       'gap': per_seq_gap
   })
-  msa_df_to_save.to_csv(f"{msa_output_dir}/pairing_msa_{chain_features['chain_id']}.csv", index = False)
+  msa_df_to_save.to_csv(f"{msa_output_dir}/Changed/pairing_msa_{chain_features['chain_id']}.csv", index = False)
   #if not, other methods and at the end return the df with similarity score
   return msa_df
 
@@ -211,11 +209,18 @@ def pair_sequences(examples: List[pipeline.FeatureDict], msa_output_dir
   for chain_features in examples:
     msa_df = _make_msa_df(chain_features, msa_output_dir, method = 'default')
     species_dict = _create_species_dict(msa_df)
+    # save species in a df
+    species = ([k, len(species_dict[k])] for k in species_dict)
+    df_species = pd.DataFrame(species, columns=["species", "count"])
+    df_species.to_csv(f"{msa_output_dir}/Changed/species_{chain_features['chain_id']}.csv", index=False)
+    #
     all_chain_species_dict.append(species_dict)
     common_species.update(set(species_dict))
 
   common_species = sorted(common_species)
   common_species.remove(b'')  # Remove target sequence species.
+  df_common_species = pd.DataFrame(common_species)
+  df_common_species.to_csv(f"{msa_output_dir}/Changed/common_species.csv", index=False)
 
   all_paired_msa_rows = [np.zeros(len(examples), int)]
   all_paired_msa_rows_dict = {k: [] for k in range(num_examples)}
@@ -236,11 +241,10 @@ def pair_sequences(examples: List[pipeline.FeatureDict], msa_output_dir
     # Skip species that are present in only one chain.
     if species_dfs_present <= 1:
       continue
-
-    if np.any(
-        np.array([len(species_df) for species_df in
+    x = np.array([len(species_df) for species_df in
                   this_species_msa_dfs if
-                  isinstance(species_df, pd.DataFrame)]) > 600):
+                  isinstance(species_df, pd.DataFrame)])
+    if np.any(x > 600): #ignore species that have more than 600 sequences any of chains
       continue
 
     paired_msa_rows = _match_rows_by_sequence_similarity(this_species_msa_dfs)
@@ -253,9 +257,8 @@ def pair_sequences(examples: List[pipeline.FeatureDict], msa_output_dir
   }
 
   # Make MSA paired dataframe and save that
-  df_paired_msa = pd.DataFrame()
-  df_paired_msa[["msa_row_A", "msa_row_B"]] = all_paired_msa_rows
-  df_paired_msa.to_csv(f'{msa_output_dir}/paired_MSA.csv', index=False)
+  df_paired_msa = pd.DataFrame(all_paired_msa_rows)
+  df_paired_msa.to_csv(f'{msa_output_dir}/Changed/paired_MSA.csv', index=False)
   return all_paired_msa_rows_dict
 
 
@@ -283,7 +286,6 @@ def reorder_paired_rows(all_paired_msa_rows_dict: Dict[int, np.ndarray]
     all_paired_msa_rows.extend(paired_rows[paired_rows_sort_index])
 
   return np.array(all_paired_msa_rows)
-
 
 def block_diag(*arrs: np.ndarray, pad_value: float = 0.0) -> np.ndarray:
   """Like scipy.linalg.block_diag but with an optional padding value."""

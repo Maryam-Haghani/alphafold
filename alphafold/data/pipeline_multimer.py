@@ -209,17 +209,16 @@ class DataPipeline:
     with temp_fasta_file(chain_fasta_str) as chain_fasta_path:
       logging.info('Running monomer pipeline on chain %s: %s',
                    chain_id, description)
-      # chain_features = self._monomer_data_pipeline.process(
-      #     input_fasta_path=chain_fasta_path,
-      #     msa_output_dir=chain_msa_output_dir)
+      chain_features = self._monomer_data_pipeline.process(
+          input_fasta_path=chain_fasta_path,
+          msa_output_dir=chain_msa_output_dir)
 
       # We only construct the pairing features if there are 2 or more unique
       # sequences.
       if not is_homomer_or_monomer:
         all_seq_msa_features = self._all_seq_msa_features(chain_fasta_path, chain_msa_output_dir)
-        chain_features = all_seq_msa_features
+        chain_features.update(all_seq_msa_features)
         chain_features['chain_id'] = chain_id
-        # chain_features.update(all_seq_msa_features)
     return chain_features
 
   def _all_seq_msa_features(self, input_fasta_path, msa_output_dir):
@@ -274,7 +273,7 @@ class DataPipeline:
       all_chain_features[chain_id] = chain_features
       sequence_features[fasta_chain.sequence] = chain_features
 
-    # all_chain_features = add_assembly_features(all_chain_features)
+    all_chain_features = add_assembly_features(all_chain_features)
 
     np_example = feature_processing.pair_and_merge(
         all_chain_features=all_chain_features, msa_output_dir=msa_output_dir)
