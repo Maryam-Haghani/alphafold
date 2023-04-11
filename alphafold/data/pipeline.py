@@ -211,7 +211,7 @@ class DataPipeline:
           use_precomputed_msas=self.use_precomputed_msas)
       bfd_msa = parsers.parse_stockholm(jackhmmer_small_bfd_result['sto'])
     else:
-      bfd_out_path = os.path.join(msa_output_dir, 'bfd_uniref_hits.a3m')
+      bfd_out_path = os.path.join(msa_output_dir, 'bfd_uniclust_hits.a3m')
       hhblits_bfd_uniref_result = run_msa_tool(
           msa_runner=self.hhblits_bfd_uniref_runner,
           input_fasta_path=input_fasta_path,
