@@ -221,9 +221,9 @@ class DataPipeline:
           use_precomputed_msas=self.use_precomputed_msas)
       bfd_msa = parsers.parse_a3m(hhblits_bfd_uniref_result['a3m'])
 
-    # templates_result = self.template_featurizer.get_templates(
-    #     query_sequence=input_sequence,
-    #     hits=pdb_template_hits)
+    templates_result = self.template_featurizer.get_templates(
+        query_sequence=input_sequence,
+        hits=pdb_template_hits)
 
     sequence_features = make_sequence_features(
         sequence=input_sequence,
@@ -237,8 +237,8 @@ class DataPipeline:
     logging.info('MGnify MSA size: %d sequences.', len(mgnify_msa))
     logging.info('Final (deduplicated) MSA size: %d sequences.',
                  msa_features['num_alignments'][0])
-    # logging.info('Total number of templates (NB: this can include bad '
-    #              'templates and is later filtered to top 4): %d.',
-    #              templates_result.features['template_domain_names'].shape[0])
+    logging.info('Total number of templates (NB: this can include bad '
+                 'templates and is later filtered to top 4): %d.',
+                 templates_result.features['template_domain_names'].shape[0])
 
-    return {**sequence_features, **msa_features,} # **templates_result.features}
+    return {**sequence_features, **msa_features, **templates_result.features}

@@ -224,7 +224,6 @@ def predict_structure(
   with open(features_output_path, 'wb') as f:
     pickle.dump(feature_dict, f, protocol=4)
 
-  return
   unrelaxed_pdbs = {}
   unrelaxed_proteins = {}
   relaxed_pdbs = {}
@@ -488,7 +487,7 @@ def main(argv):
         random_seed=random_seed,
         models_to_relax=FLAGS.models_to_relax)
 
-print("*************************END******************************8")
+  print("*************************END of Changed******************************")
 if __name__ == '__main__':
   flags.mark_flags_as_required([
       'fasta_paths',
