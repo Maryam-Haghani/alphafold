@@ -26,12 +26,18 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Set
 DeletionMatrix = Sequence[Sequence[int]]
 
 
-@dataclasses.dataclass(frozen=True)
+# @dataclasses.dataclass(frozen=True)
 class Msa:
   """Class representing a parsed MSA file."""
-  sequences: Sequence[str]
-  deletion_matrix: DeletionMatrix
-  descriptions: Sequence[str]
+  def __init__(self,
+    sequences: Sequence[str],
+    deletion_matrix: DeletionMatrix,
+    descriptions: Sequence[str],
+    original_sequences: Sequence[str] = []):
+      self.sequences= sequences
+      self.deletion_matrix = deletion_matrix
+      self.descriptions =  descriptions
+      self.original_sequences = original_sequences
 
   def __post_init__(self):
     if not (len(self.sequences) ==
@@ -49,7 +55,8 @@ class Msa:
   def truncate(self, max_seqs: int):
     return Msa(sequences=self.sequences[:max_seqs],
                deletion_matrix=self.deletion_matrix[:max_seqs],
-               descriptions=self.descriptions[:max_seqs])
+               descriptions=self.descriptions[:max_seqs],
+               original_sequences=self.original_sequences[:max_seqs])
 
 
 @dataclasses.dataclass(frozen=True)
@@ -94,12 +101,13 @@ def parse_fasta(fasta_string: str) -> Tuple[Sequence[str], Sequence[str]]:
   return sequences, descriptions
 
 
-def parse_stockholm(stockholm_string: str) -> Msa:
+def parse_stockholm(stockholm_string: str, need_original_msa: bool = False) -> Msa:
   """Parses sequences and deletion matrix from stockholm format alignment.
 
   Args:
     stockholm_string: The string contents of a stockholm file. The first
       sequence in the file should be the query sequence.
+    need_original_msa: whether to save original msa before alignment or not
 
   Returns:
     A tuple of:
@@ -122,6 +130,7 @@ def parse_stockholm(stockholm_string: str) -> Msa:
     name_to_sequence[name] += sequence
 
   msa = []
+  original_msa = []
   deletion_matrix = []
 
   query = ''
@@ -136,6 +145,8 @@ def parse_stockholm(stockholm_string: str) -> Msa:
     aligned_sequence = ''.join([sequence[c] for c in keep_columns])
 
     msa.append(aligned_sequence)
+    if need_original_msa:
+      original_msa.append(sequence)
 
     # Count the number of deletions w.r.t. query.
     deletion_vec = []
@@ -149,17 +160,25 @@ def parse_stockholm(stockholm_string: str) -> Msa:
           deletion_count = 0
     deletion_matrix.append(deletion_vec)
 
-  return Msa(sequences=msa,
-             deletion_matrix=deletion_matrix,
-             descriptions=list(name_to_sequence.keys()))
+  if need_original_msa:
+    msa = Msa(sequences=msa,
+               deletion_matrix=deletion_matrix,
+               descriptions=list(name_to_sequence.keys()),
+              original_sequences=original_msa)
+  else:
+    msa = Msa(sequences=msa,
+              deletion_matrix=deletion_matrix,
+              descriptions=list(name_to_sequence.keys()))
+  return msa
 
 
-def parse_a3m(a3m_string: str) -> Msa:
+def parse_a3m(a3m_string: str, need_original_msa: bool = False) -> Msa:
   """Parses sequences and deletion matrix from a3m format alignment.
 
   Args:
     a3m_string: The string contents of a a3m file. The first sequence in the
       file should be the query sequence.
+    need_original_msa: whether to save original msa before alignment or not
 
   Returns:
     A tuple of:
@@ -186,10 +205,17 @@ def parse_a3m(a3m_string: str) -> Msa:
   # Make the MSA matrix out of aligned (deletion-free) sequences.
   deletion_table = str.maketrans('', '', string.ascii_lowercase)
   aligned_sequences = [s.translate(deletion_table) for s in sequences]
-  return Msa(sequences=aligned_sequences,
+
+  if need_original_msa:
+    msa = Msa(sequences=aligned_sequences,
+             deletion_matrix=deletion_matrix,
+             descriptions=descriptions,
+             original_sequences= sequences)
+  else:
+    msa = Msa(sequences=aligned_sequences,
              deletion_matrix=deletion_matrix,
              descriptions=descriptions)
-
+  return msa
 
 def _convert_sto_seq_to_a3m(
     query_non_gaps: Sequence[bool], sto_seq: str) -> Iterable[str]:

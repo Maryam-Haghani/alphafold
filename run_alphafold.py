@@ -142,13 +142,19 @@ flags.DEFINE_integer('num_multimer_predictions_per_model', 5, 'How many '
                      'generated per model. E.g. if this is 2 and there are 5 '
                      'models then there will be 10 predictions per input. '
                      'Note: this FLAG only applies if model_preset=multimer')
-flags.DEFINE_boolean('use_precomputed_msas', True, 'Whether to read MSAs that '
+flags.DEFINE_boolean('use_precomputed_msas', False, 'Whether to read MSAs that '
                      'have been written to disk instead of running the MSA '
                      'tools. The MSA files are looked up in the output '
                      'directory, so it must stay the same between multiple '
                      'runs that are to reuse the MSAs. WARNING: This will not '
                      'check if the sequence, database or configuration have '
                      'changed.')
+flags.DEFINE_boolean('use_precomputed_final_msa', False, 'Whether to read each chain MSAs'
+                     'instead of computing MSA based of bfd, mgnify and uniref90 datasets')
+flags.DEFINE_boolean('use_precomputed_paired_msa', False, 'Whether to read paired MSA'
+                     'instead of computing that based of uniprot')
+flags.DEFINE_string('precomputed_paired_msa_file', '', 'file of fasta path')
+
 flags.DEFINE_enum_class('models_to_relax', ModelsToRelax.BEST, ModelsToRelax,
                         'The models to run the final relaxation step on. '
                         'If `all`, all models are relaxed, which may be time '
@@ -220,7 +226,8 @@ def predict_structure(
   timings['features'] = time.time() - t_0
 
   # Write out features as a pickled dictionary.
-  features_output_path = os.path.join(os.path.join(msa_output_dir, 'Changed'), 'features.pkl')
+  os.makedirs(os.path.join(output_dir, 'Changed'), exist_ok=True)
+  features_output_path = os.path.join(os.path.join(output_dir, 'Changed'), 'features.pkl')
   with open(features_output_path, 'wb') as f:
     pickle.dump(feature_dict, f, protocol=4)
 
@@ -267,7 +274,7 @@ def predict_structure(
     np_prediction_result = _jnp_to_np(dict(prediction_result))
 
     # Save the model outputs.
-    result_output_path = os.path.join(output_dir, f'result_{model_name}.pkl')
+    result_output_path = os.path.join(os.path.join(output_dir, 'Changed'), f'result_{model_name}.pkl')
     with open(result_output_path, 'wb') as f:
       pickle.dump(np_prediction_result, f, protocol=4)
 
@@ -283,7 +290,7 @@ def predict_structure(
 
     unrelaxed_proteins[model_name] = unrelaxed_protein
     unrelaxed_pdbs[model_name] = protein.to_pdb(unrelaxed_protein)
-    unrelaxed_pdb_path = os.path.join(output_dir, f'unrelaxed_{model_name}.pdb')
+    unrelaxed_pdb_path = os.path.join(os.path.join(output_dir, 'Changed'), f'unrelaxed_{model_name}.pdb')
     with open(unrelaxed_pdb_path, 'w') as f:
       f.write(unrelaxed_pdbs[model_name])
 
@@ -314,20 +321,20 @@ def predict_structure(
 
     # Save the relaxed PDB.
     relaxed_output_path = os.path.join(
-        output_dir, f'relaxed_{model_name}.pdb')
+        os.path.join(output_dir, 'Changed'), f'relaxed_{model_name}.pdb')
     with open(relaxed_output_path, 'w') as f:
       f.write(relaxed_pdb_str)
 
   # Write out relaxed PDBs in rank order.
   for idx, model_name in enumerate(ranked_order):
-    ranked_output_path = os.path.join(output_dir, f'ranked_{idx}.pdb')
+    ranked_output_path = os.path.join(os.path.join(output_dir, 'Changed'), f'ranked_{idx}.pdb')
     with open(ranked_output_path, 'w') as f:
       if model_name in relaxed_pdbs:
         f.write(relaxed_pdbs[model_name])
       else:
         f.write(unrelaxed_pdbs[model_name])
 
-  ranking_output_path = os.path.join(output_dir, 'ranking_debug.json')
+  ranking_output_path = os.path.join(os.path.join(output_dir, 'Changed'), 'ranking_debug.json')
   with open(ranking_output_path, 'w') as f:
     label = 'iptm+ptm' if 'iptm' in prediction_result else 'plddts'
     f.write(json.dumps(
@@ -335,17 +342,17 @@ def predict_structure(
 
   logging.info('Final timings for %s: %s', fasta_name, timings)
 
-  timings_output_path = os.path.join(output_dir, 'timings.json')
+  timings_output_path = os.path.join(os.path.join(output_dir, 'Changed'), 'timings.json')
   with open(timings_output_path, 'w') as f:
     f.write(json.dumps(timings, indent=4))
   if models_to_relax != ModelsToRelax.NONE:
-    relax_metrics_path = os.path.join(output_dir, 'relax_metrics.json')
+    relax_metrics_path = os.path.join(os.path.join(output_dir, 'Changed'), 'relax_metrics.json')
     with open(relax_metrics_path, 'w') as f:
       f.write(json.dumps(relax_metrics, indent=4))
 
 
 def main(argv):
-  print("***********************************************")
+  print("Hi Maryam!")
   print("***********************************************")
   print("Running changed code!")
   print("***********************************************")
@@ -375,6 +382,8 @@ def main(argv):
               should_be_set=run_multimer_system)
   _check_flag('uniprot_database_path', 'model_preset',
               should_be_set=run_multimer_system)
+  _check_flag('precomputed_paired_msa_file', 'use_precomputed_paired_msa',
+              should_be_set=FLAGS['use_precomputed_paired_msa'].value)
 
   if FLAGS.model_preset == 'monomer_casp14':
     num_ensemble = 8
@@ -427,7 +436,8 @@ def main(argv):
       template_searcher=template_searcher,
       template_featurizer=template_featurizer,
       use_small_bfd=use_small_bfd,
-      use_precomputed_msas=FLAGS.use_precomputed_msas)
+      use_precomputed_msas=FLAGS.use_precomputed_msas,
+      use_precomputed_final_msa = FLAGS.use_precomputed_final_msa)
 
   if run_multimer_system:
     num_predictions_per_model = FLAGS.num_multimer_predictions_per_model
@@ -435,7 +445,9 @@ def main(argv):
         monomer_data_pipeline=monomer_data_pipeline,
         jackhmmer_binary_path=FLAGS.jackhmmer_binary_path,
         uniprot_database_path=FLAGS.uniprot_database_path,
-        use_precomputed_msas=FLAGS.use_precomputed_msas)
+        use_precomputed_msas=FLAGS.use_precomputed_msas,
+        use_precomputed_paired_msa = FLAGS.use_precomputed_paired_msa,
+        precomputed_paired_msa_file = FLAGS.precomputed_paired_msa_file)
   else:
     num_predictions_per_model = 1
     data_pipeline = monomer_data_pipeline
@@ -472,10 +484,12 @@ def main(argv):
 
   # Predict structure for each of the sequences.
   for fasta_name in fasta_names:
-    if is_fasta_path_dir:
+    if is_fasta_path_dir :
         path = FLAGS.fasta_paths[0]+'/'+fasta_name+'.fasta'
     else:
         path = FLAGS.fasta_paths[0]
+    print('***************************************************************')
+    print(path)
     predict_structure(
         fasta_path=path,
         fasta_name=fasta_name,

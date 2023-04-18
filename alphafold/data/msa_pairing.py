@@ -76,6 +76,8 @@ def create_paired_features(
     paired_rows = reorder_paired_rows(
         paired_chains_to_paired_row_indices)
 
+    _get_paired_msa(chains, msa_output_dir, paired_rows)
+
     for chain_num, chain in enumerate(chains):
       new_chain = {k: v for k, v in chain.items() if '_all_seq' not in k}
       for feature_name in chain_keys:
@@ -86,6 +88,30 @@ def create_paired_features(
           len(paired_rows[:, chain_num]))
       updated_chains.append(new_chain)
     return updated_chains
+
+
+def _get_paired_msa(chains, msa_output_dir, paired_rows):
+    # Make MSA paired dataframe and save that
+    df_paired_msa = pd.DataFrame(paired_rows)
+    df_paired_msa.to_csv(f'{msa_output_dir}/Changed/paired_MSA.csv', index=False)
+
+    L = ''
+    for chain_num, chain in enumerate(chains):
+        pairing = pd.read_csv(f"{msa_output_dir}/Changed/pairing_msa_{chain['chain_id']}.csv")
+        pairing = pairing.rename(columns=lambda col: col + f"_{chain['chain_id']}")
+        df_paired_msa = df_paired_msa.rename(columns={chain_num: f"msa_row_{chain['chain_id']}"})
+        df_paired_msa = df_paired_msa.merge(pairing, on=f"msa_row_{chain['chain_id']}")
+
+        L += df_paired_msa[f"seq_original_msa_{chain['chain_id']}"]
+
+    # df_paired_msa.to_csv(f'{msa_output_dir}/paired_msa_full.csv', index=False)
+    with open(f'{msa_output_dir}/paired_result.txt', 'w') as f:
+        i = 1
+        for l in L:
+            f.writelines(f'{i}th_row {l}')
+            f.writelines('\n')
+            i += 1
+        f.close()
 
 
 def pad_features(feature: np.ndarray, feature_name: str) -> np.ndarray:
@@ -145,6 +171,8 @@ def _make_msa_df(chain_features: pipeline.FeatureDict, msa_output_dir, method) -
               chain_features['msa_species_identifiers_all_seq'])),
       'seq_msa':
           chain_features['seq_msa_all_seq'],
+      'seq_original_msa':
+          chain_features['seq_original_msa_all_seq'],
       'msa_species_identifiers':
           chain_features['msa_species_identifiers_all_seq'],
       'msa_similarity': per_seq_similarity,
@@ -255,10 +283,6 @@ def pair_sequences(examples: List[pipeline.FeatureDict], msa_output_dir
       num_examples: np.array(paired_msa_rows) for
       num_examples, paired_msa_rows in all_paired_msa_rows_dict.items()
   }
-
-  # Make MSA paired dataframe and save that
-  df_paired_msa = pd.DataFrame(all_paired_msa_rows)
-  df_paired_msa.to_csv(f'{msa_output_dir}/Changed/paired_MSA.csv', index=False)
   return all_paired_msa_rows_dict
 
 

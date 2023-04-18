@@ -175,7 +175,9 @@ class DataPipeline:
                jackhmmer_binary_path: str,
                uniprot_database_path: str,
                max_uniprot_hits: int = 50000,
-               use_precomputed_msas: bool = False):
+               use_precomputed_msas: bool = False,
+               use_precomputed_paired_msa: bool = False,
+               precomputed_paired_msa_file: str = ''):
     """Initializes the data pipeline.
 
     Args:
@@ -186,6 +188,8 @@ class DataPipeline:
         will be searched with jackhmmer and used for MSA pairing.
       max_uniprot_hits: The maximum number of hits to return from uniprot.
       use_precomputed_msas: Whether to use pre-existing MSAs; see run_alphafold.
+      use_precomputed_paired_msa: Whether to use pre-existing paired-MSA
+      precomputed_paired_msa_file
     """
     self._monomer_data_pipeline = monomer_data_pipeline
     self._uniprot_msa_runner = jackhmmer.Jackhmmer(
@@ -193,6 +197,8 @@ class DataPipeline:
         database_path=uniprot_database_path)
     self._max_uniprot_hits = max_uniprot_hits
     self.use_precomputed_msas = use_precomputed_msas
+    self.use_precomputed_paired_msa = use_precomputed_paired_msa
+    self.precomputed_paired_msa_file = precomputed_paired_msa_file
 
   def _process_single_chain(
       self,
@@ -214,8 +220,8 @@ class DataPipeline:
           msa_output_dir=chain_msa_output_dir)
 
       # We only construct the pairing features if there are 2 or more unique
-      # sequences.
-      if not is_homomer_or_monomer:
+      # sequences -> For now. only consider hetero-dimers
+      if not is_homomer_or_monomer and (not self.use_precomputed_paired_msa):
         all_seq_msa_features = self._all_seq_msa_features(chain_fasta_path, chain_msa_output_dir)
         chain_features.update(all_seq_msa_features)
         chain_features['chain_id'] = chain_id
@@ -227,11 +233,11 @@ class DataPipeline:
     result = pipeline.run_msa_tool(
         self._uniprot_msa_runner, input_fasta_path, out_path, 'sto',
         self.use_precomputed_msas)
-    msa = parsers.parse_stockholm(result['sto'])
+    msa = parsers.parse_stockholm(result['sto'], need_original_msa= True)
     msa = msa.truncate(max_seqs=self._max_uniprot_hits)
     all_seq_features = pipeline.make_msa_features([msa])
     valid_feats = msa_pairing.MSA_FEATURES + (
-        'msa_species_identifiers', 'seq_msa'
+      'msa_species_identifiers', 'seq_msa', 'original_msa', 'seq_original_msa'
     )
     feats = {f'{k}_all_seq': v for k, v in all_seq_features.items()
              if k in valid_feats}
@@ -275,8 +281,10 @@ class DataPipeline:
 
     all_chain_features = add_assembly_features(all_chain_features)
 
-    np_example = feature_processing.pair_and_merge(
-        all_chain_features=all_chain_features, msa_output_dir=msa_output_dir)
+    np_example = feature_processing.process_features(all_chain_features=all_chain_features,
+                                                     msa_output_dir=msa_output_dir,
+                                                     use_precomputed_paired_msa = self.use_precomputed_paired_msa,
+                                                     precomputed_paired_msa_file = self.precomputed_paired_msa_file)
 
     # Pad MSA to avoid zero-sized extra_msa.
     np_example = pad_msa(np_example, 512)
