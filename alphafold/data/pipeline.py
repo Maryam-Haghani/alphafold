@@ -216,7 +216,7 @@ class DataPipeline:
     logging.info('Final (deduplicated) MSA size: %d sequences.',
                  msa_features['num_alignments'][0])
 
-    return {**sequence_features, **msa_features, templates_result.features}
+    return {**sequence_features, **msa_features, **templates_result.features}
 
   def _get_bfd_MSA(self, input_fasta_path, msa_output_dir):
       if self._use_small_bfd:
