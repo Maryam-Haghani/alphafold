@@ -149,11 +149,6 @@ flags.DEFINE_boolean('use_precomputed_msas', False, 'Whether to read MSAs that '
                      'runs that are to reuse the MSAs. WARNING: This will not '
                      'check if the sequence, database or configuration have '
                      'changed.')
-flags.DEFINE_boolean('use_precomputed_final_msa', False, 'Whether to read each chain MSAs'
-                     'instead of computing MSA based of bfd, mgnify and uniref90 datasets')
-flags.DEFINE_boolean('use_precomputed_paired_msa', False, 'Whether to read paired MSA'
-                     'instead of computing that based of uniprot')
-flags.DEFINE_string('precomputed_paired_msa_file', '', 'file of fasta path')
 
 flags.DEFINE_enum_class('models_to_relax', ModelsToRelax.BEST, ModelsToRelax,
                         'The models to run the final relaxation step on. '
@@ -224,7 +219,7 @@ def predict_structure(
       input_fasta_path=fasta_path,
       msa_output_dir=msa_output_dir)
   timings['features'] = time.time() - t_0
-
+  return
   # Write out features as a pickled dictionary.
   os.makedirs(os.path.join(output_dir, 'Changed'), exist_ok=True)
   features_output_path = os.path.join(os.path.join(output_dir, 'Changed'), 'features.pkl')
@@ -382,8 +377,6 @@ def main(argv):
               should_be_set=run_multimer_system)
   _check_flag('uniprot_database_path', 'model_preset',
               should_be_set=run_multimer_system)
-  _check_flag('precomputed_paired_msa_file', 'use_precomputed_paired_msa',
-              should_be_set=FLAGS['use_precomputed_paired_msa'].value)
 
   if FLAGS.model_preset == 'monomer_casp14':
     num_ensemble = 8
@@ -436,8 +429,7 @@ def main(argv):
       template_searcher=template_searcher,
       template_featurizer=template_featurizer,
       use_small_bfd=use_small_bfd,
-      use_precomputed_msas=FLAGS.use_precomputed_msas,
-      use_precomputed_final_msa = FLAGS.use_precomputed_final_msa)
+      use_precomputed_msas=FLAGS.use_precomputed_msas)
 
   if run_multimer_system:
     num_predictions_per_model = FLAGS.num_multimer_predictions_per_model
@@ -445,9 +437,7 @@ def main(argv):
         monomer_data_pipeline=monomer_data_pipeline,
         jackhmmer_binary_path=FLAGS.jackhmmer_binary_path,
         uniprot_database_path=FLAGS.uniprot_database_path,
-        use_precomputed_msas=FLAGS.use_precomputed_msas,
-        use_precomputed_paired_msa = FLAGS.use_precomputed_paired_msa,
-        precomputed_paired_msa_file = FLAGS.precomputed_paired_msa_file)
+        use_precomputed_msas=FLAGS.use_precomputed_msas)
   else:
     num_predictions_per_model = 1
     data_pipeline = monomer_data_pipeline

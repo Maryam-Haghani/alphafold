@@ -46,106 +46,22 @@ def _is_homomer_or_monomer(chains: Iterable[pipeline.FeatureDict]) -> bool:
   return num_unique_chains == 1
 
 def process_features(
-    all_chain_features: MutableMapping[str, pipeline.FeatureDict], msa_output_dir, use_precomputed_paired_msa,
-    precomputed_paired_msa_file
+    all_chain_features: MutableMapping[str, pipeline.FeatureDict], msa_output_dir
     ) -> pipeline.FeatureDict:
     """Runs processing on features to augment, pair and merge.
 
     Args:
       all_chain_features: A MutableMap of dictionaries of features for each chain.
       msa_output_dir
-      use_precomputed_paired_msa
-      precomputed_paired_msa_file
     Returns:
       A dictionary of features.
     """
-
-    process_unmerged_features(all_chain_features)
-
     np_chains_list = list(all_chain_features.values())
 
-    pair_msa_sequences = not _is_homomer_or_monomer(np_chains_list)
-    if pair_msa_sequences:
-        if not use_precomputed_paired_msa:
-            np_chains_list = msa_pairing.create_paired_features(
-                chains=np_chains_list, msa_output_dir=msa_output_dir)
-        else:
-            #read msa file and parse than based on Msa
-            msa_file = os.path.join(msa_output_dir, precomputed_paired_msa_file)
-            msa_format = precomputed_paired_msa_file.split('.')[1]
-            msa = pipeline.read_msa(msa_format, msa_file)
-            msa = parsers.parse_stockholm(msa['txt'])
-            all_seq_features = pipeline.make_msa_features([msa])
-            valid_feats = msa_pairing.MSA_FEATURES + (
-                'msa_species_identifiers', 'seq_msa', 'num_alignments'
-            )
-            paired_features = {f'{k}_all_seq': v for k, v in all_seq_features.items()
-                     if k in valid_feats}
-            index = 0
-            for chains_feature in np_chains_list:
-                num_residues = len(chains_feature['aatype'])
-                current_paired_features = paired_features.copy()
-                num_alignments = len(current_paired_features['msa_all_seq'])
-                current_paired_features['num_alignments_all_seq'] = np.asarray(num_alignments, dtype=np.int32)
-                current_paired_features['msa_all_seq'] = paired_features['msa_all_seq'][
-                                                                    :, index: index + num_residues]
-                current_paired_features['deletion_matrix_all_seq'] = np.asarray(
-                    paired_features['deletion_matrix_int_all_seq'][:, index: index + num_residues], dtype=np.float32)
+    np_chains_list = msa_pairing.create_paired_features(
+        chains=np_chains_list, msa_output_dir=msa_output_dir)
 
-                chains_feature.update(current_paired_features)
-                index += num_residues
-
-        np_chains_list = msa_pairing.deduplicate_unpaired_sequences(np_chains_list)
-
-    np_chains_list = crop_chains(
-      np_chains_list,
-      msa_crop_size=MSA_CROP_SIZE,
-      pair_msa_sequences=pair_msa_sequences,
-      max_templates=MAX_TEMPLATES)
-    np_example = msa_pairing.merge_chain_features(
-      np_chains_list=np_chains_list, pair_msa_sequences=pair_msa_sequences,
-      max_templates=MAX_TEMPLATES)
-
-    # add seq_msa to features
-    l = []
-    for msa in np_example['msa']:
-        l.append(np.array([residue_constants.ID_TO_HHBLITS_AA[x] for x in msa]))
-    np_example['seq_msa'] = np.array(l)
-
-    np_example = process_final(np_example)
-
-    return np_example
-
-
-def crop_chains(
-    chains_list: List[pipeline.FeatureDict],
-    msa_crop_size: int,
-    pair_msa_sequences: bool,
-    max_templates: int) -> List[pipeline.FeatureDict]:
-  """Crops the MSAs for a set of chains.
-
-  Args:
-    chains_list: A list of chains to be cropped.
-    msa_crop_size: The total number of sequences to crop from the MSA.
-    pair_msa_sequences: Whether we are operating in sequence-pairing mode.
-    max_templates: The maximum templates to use per chain.
-
-  Returns:
-    The chains cropped.
-  """
-
-  # Apply the cropping.
-  cropped_chains = []
-  for chain in chains_list:
-    cropped_chain = _crop_single_chain(
-        chain,
-        msa_crop_size=msa_crop_size,
-        pair_msa_sequences=pair_msa_sequences,
-        max_templates=max_templates)
-    cropped_chains.append(cropped_chain)
-
-  return cropped_chains
-
+    return np_chains_list
 
 def _crop_single_chain(chain: pipeline.FeatureDict,
                        msa_crop_size: int,

@@ -78,15 +78,6 @@ def create_paired_features(
 
     _get_paired_msa(chains, msa_output_dir, paired_rows)
 
-    for chain_num, chain in enumerate(chains):
-      new_chain = {k: v for k, v in chain.items() if '_all_seq' not in k}
-      for feature_name in chain_keys:
-        if feature_name.endswith('_all_seq'):
-          feats_padded = pad_features(chain[feature_name], feature_name)
-          new_chain[feature_name] = feats_padded[paired_rows[:, chain_num]]
-      new_chain['num_alignments_all_seq'] = np.asarray(
-          len(paired_rows[:, chain_num]))
-      updated_chains.append(new_chain)
     return updated_chains
 
 
@@ -104,7 +95,7 @@ def _get_paired_msa(chains, msa_output_dir, paired_rows):
 
         L += df_paired_msa[f"seq_original_msa_{chain['chain_id']}"]
 
-    # df_paired_msa.to_csv(f'{msa_output_dir}/paired_msa_full.csv', index=False)
+    df_paired_msa.to_csv(f'{msa_output_dir}/Changed/paired_msa_full.csv', index=False)
     with open(f'{msa_output_dir}/paired_result.txt', 'w') as f:
         i = 1
         for l in L:
@@ -247,8 +238,8 @@ def pair_sequences(examples: List[pipeline.FeatureDict], msa_output_dir
 
   common_species = sorted(common_species)
   common_species.remove(b'')  # Remove target sequence species.
-  df_common_species = pd.DataFrame(common_species)
-  df_common_species.to_csv(f"{msa_output_dir}/Changed/common_species.csv", index=False)
+
+  _save_common_species(msa_output_dir)
 
   all_paired_msa_rows = [np.zeros(len(examples), int)]
   all_paired_msa_rows_dict = {k: [] for k in range(num_examples)}
@@ -284,6 +275,15 @@ def pair_sequences(examples: List[pipeline.FeatureDict], msa_output_dir
       num_examples, paired_msa_rows in all_paired_msa_rows_dict.items()
   }
   return all_paired_msa_rows_dict
+
+
+def _save_common_species(msa_output_dir):
+    df_species_A = pd.read_csv(f"{msa_output_dir}/Changed/species_A.csv")
+    df_species_A = df_species_A.rename(columns={'count': 'count_A'})
+    df_species_B = pd.read_csv(f"{msa_output_dir}/Changed/species_B.csv")
+    df_species_B = df_species_B.rename(columns={'count': 'count_B'})
+    df_common_species = df_species_A.merge(df_species_B, on='species')
+    df_common_species.to_csv(f"{msa_output_dir}/Changed/common_species.csv", index=False)
 
 
 def reorder_paired_rows(all_paired_msa_rows_dict: Dict[int, np.ndarray]
