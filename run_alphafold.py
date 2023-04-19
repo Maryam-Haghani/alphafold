@@ -464,6 +464,13 @@ def main(argv):
     random_seed = random.randrange(sys.maxsize // len(model_runners))
   logging.info('Using random seed %d for the data pipeline', random_seed)
 
+  print("***********************Start OF AF****************************8")
+  import tensorflow as tf
+  if tf.test.gpu_device_name():
+    print('Default GPU Device:{}'.format(tf.test.gpu_device_name()))
+  else:
+    print("Please install GPU version of TF")
+
   # Predict structure for each of the sequences.
   for fasta_name in fasta_names:
     if is_fasta_path_dir:
