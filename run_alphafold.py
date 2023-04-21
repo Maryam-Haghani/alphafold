@@ -477,6 +477,7 @@ def main(argv):
         path = FLAGS.fasta_paths[0]+'/'+fasta_name+'.fasta'
     else:
         path = FLAGS.fasta_paths[0]
+    print(f"\n \n {fasta_name} \n \n")
     predict_structure(
         fasta_path=path,
         fasta_name=fasta_name,
