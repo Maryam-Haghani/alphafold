@@ -51,6 +51,7 @@ class ModelsToRelax(enum.Enum):
   ALL = 0
   BEST = 1
   NONE = 2
+  TOP5 = 3
 
 flags.DEFINE_list(
     'fasta_paths', None, 'Paths to FASTA files, each containing a prediction '
@@ -149,7 +150,7 @@ flags.DEFINE_boolean('use_precomputed_msas', True, 'Whether to read MSAs that '
                      'runs that are to reuse the MSAs. WARNING: This will not '
                      'check if the sequence, database or configuration have '
                      'changed.')
-flags.DEFINE_enum_class('models_to_relax', ModelsToRelax.BEST, ModelsToRelax,
+flags.DEFINE_enum_class('models_to_relax', ModelsToRelax.TOP5, ModelsToRelax,
                         'The models to run the final relaxation step on. '
                         'If `all`, all models are relaxed, which may be time '
                         'consuming. If `best`, only the most confident model '
@@ -294,6 +295,8 @@ def predict_structure(
   # Relax predictions.
   if models_to_relax == ModelsToRelax.BEST:
     to_relax = [ranked_order[0]]
+  elif models_to_relax == ModelsToRelax.TOP5:
+    to_relax = ranked_order[:5]
   elif models_to_relax == ModelsToRelax.ALL:
     to_relax = ranked_order
   elif models_to_relax == ModelsToRelax.NONE:
