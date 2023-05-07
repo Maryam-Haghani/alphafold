@@ -235,7 +235,7 @@ class DataPipeline:
         self.use_precomputed_msas)
     msa = parsers.parse_stockholm(result['sto'], need_original_msa= True)
     msa = msa.truncate(max_seqs=self._max_uniprot_hits)
-    all_seq_features = pipeline.make_msa_features([msa])
+    all_seq_features, msa_props = pipeline.make_msa_features([msa])
     valid_feats = msa_pairing.MSA_FEATURES + (
       'msa_species_identifiers', 'seq_msa', 'original_msa', 'seq_original_msa'
     )

@@ -120,6 +120,7 @@ flags.DEFINE_string('obsolete_pdbs_path',obsolete_pdbs_path , 'Path to file cont
                     'mapping from obsolete PDB IDs to the PDB IDs of their '
                     'replacements.')
 flags.DEFINE_boolean('use_templates', True, 'Whether to use templates for prediction or not.')
+flags.DEFINE_boolean('save_individual_msa', False, 'Whether  to save some supplementary files for each of the chains of target.')
 flags.DEFINE_enum('db_preset', 'full_dbs',
                   ['full_dbs', 'reduced_dbs'],
                   'Choose preset MSA database configuration - '
@@ -442,7 +443,8 @@ def main(argv):
       use_small_bfd=use_small_bfd,
       use_precomputed_msas=FLAGS.use_precomputed_msas,
       use_precomputed_final_msa = FLAGS.use_precomputed_final_msa,
-      use_templates = FLAGS.use_templates
+      use_templates = FLAGS.use_templates,
+      save_individual_msa = FLAGS.save_individual_msa
   )
 
   if run_multimer_system:

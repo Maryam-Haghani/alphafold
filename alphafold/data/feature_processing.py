@@ -75,7 +75,7 @@ def process_features(
             msa_format = precomputed_paired_msa_file.split('.')[1]
             msa = pipeline.read_msa(msa_format, msa_file)
             msa = parsers.parse_stockholm(msa['txt'])
-            all_seq_features = pipeline.make_msa_features([msa])
+            all_seq_features, msa_pros = pipeline.make_msa_features([msa])
             valid_feats = msa_pairing.MSA_FEATURES + (
                 'msa_species_identifiers', 'seq_msa', 'num_alignments'
             )

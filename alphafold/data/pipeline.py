@@ -26,6 +26,8 @@ from alphafold.data.tools import hhsearch
 from alphafold.data.tools import hmmsearch
 from alphafold.data.tools import jackhmmer
 import numpy as np
+import pandas as pd
+import json
 
 # Internal import (7716).
 
@@ -62,13 +64,21 @@ def make_msa_features(msas: Sequence[parsers.Msa]) -> FeatureDict:
   deletion_matrix = []
   species_ids = []
   seen_sequences = set()
+  msa_props = []
+
+
   for msa_index, msa in enumerate(msas):
     if not msa:
       raise ValueError(f'MSA {msa_index} must contain at least one sequence.')
+    msa_prop = {}
+    msa_prop['msa_index'] = msa_index
+    msa_prop['total_seq_count'] = len(msa.sequences)
+    msa_new_seq_count = 0
     for sequence_index, sequence in enumerate(msa.sequences):
       if sequence in seen_sequences:
         continue
       seen_sequences.add(sequence)
+      msa_new_seq_count +=1
       int_msa.append(
           [residue_constants.HHBLITS_AA_TO_ID[res] for res in sequence])
       seq_msa.append(sequence)
@@ -81,6 +91,8 @@ def make_msa_features(msas: Sequence[parsers.Msa]) -> FeatureDict:
         int_original_msa.append(
             [residue_constants.HHBLITS_AA_TO_ID[res] for res in msa.original_sequences[sequence_index]])
         seq_original_msa.append(msa.original_sequences[sequence_index])
+    msa_prop['msa_new_seq_count'] = msa_new_seq_count
+    msa_props.append(msa_prop)
 
   num_res = len(msas[0].sequences[0])
   num_alignments = len(int_msa)
@@ -91,7 +103,7 @@ def make_msa_features(msas: Sequence[parsers.Msa]) -> FeatureDict:
               'seq_msa': np.array(seq_msa, dtype=np.object_),
               'num_alignments': np.array([num_alignments] * num_res, dtype=np.int32),
               'msa_species_identifiers': np.array(species_ids, dtype=np.object_)}
-  return features
+  return features, msa_props
 
 
 def run_msa_tool(msa_runner, input_fasta_path: str, msa_out_path: str,
@@ -141,7 +153,8 @@ class DataPipeline:
                uniref_max_hits: int = 10000,
                use_precomputed_msas: bool = False,
                use_precomputed_final_msa: bool = False,
-               use_templates: bool = True):
+               use_templates: bool = True,
+               save_individual_msa:bool = False):
     """Initializes the data pipeline."""
     self._use_small_bfd = use_small_bfd
     self.jackhmmer_uniref90_runner = jackhmmer.Jackhmmer(
@@ -165,6 +178,7 @@ class DataPipeline:
     self.use_precomputed_msas = use_precomputed_msas
     self.use_precomputed_final_msa = use_precomputed_final_msa
     self.use_templates = use_templates
+    self.save_individual_msa = save_individual_msa
 
   def process(self, input_fasta_path: str, msa_output_dir: str) -> FeatureDict:
     """Runs alignment tools on the input sequence and creates features."""
@@ -209,7 +223,17 @@ class DataPipeline:
                 parsed_msa = parsers.parse_a3m(msa_read[msa_format])
             msa.append(parsed_msa)
 
-    msa_features = make_msa_features(msa)
+    msa_features, msa_props = make_msa_features(msa)
+
+    # To save individual msa
+    if self.save_individual_msa:
+        supplementary = os.path.join(msa_output_dir, 'supplementary_files')
+        os.makedirs(supplementary ,exist_ok=True)
+        # save msa properties to file
+        with open(os.path.join(supplementary, "individual_msa_props.txt"), 'w') as outfile:
+            json.dump(msa_props, outfile)
+        # save msa to file
+        self._save_msa_to_file(msa_features, supplementary)
 
     # Find template features based on uniref90 MSAs
     templates_result = self._find_templates(input_sequence, msa_output_dir, uniref90_result_sto)
@@ -221,6 +245,15 @@ class DataPipeline:
                  msa_features['num_alignments'][0])
 
     return {**sequence_features, **msa_features, **templates_result.features}
+
+  def _save_msa_to_file(self, msa_features, msa_output_dir):
+      msa_df_to_save = pd.DataFrame({
+          'msa': [" ".join([str(res) for res in seq]) for seq in msa_features['msa']],
+          'seq_msa': msa_features['seq_msa'],
+          'msa_species_identifiers': msa_features['msa_species_identifiers']
+      })
+
+      msa_df_to_save.to_csv(f"{msa_output_dir}/concat_msa.csv", index=False)
 
   def _get_bfd_MSA(self, input_fasta_path, msa_output_dir):
       if self._use_small_bfd:
