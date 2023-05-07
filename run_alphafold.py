@@ -119,6 +119,7 @@ flags.DEFINE_string('max_template_date', None, 'Maximum template release date '
 flags.DEFINE_string('obsolete_pdbs_path',obsolete_pdbs_path , 'Path to file containing a '
                     'mapping from obsolete PDB IDs to the PDB IDs of their '
                     'replacements.')
+flags.DEFINE_boolean('use_templates', True, 'Whether to use templates for prediction or not.')
 flags.DEFINE_enum('db_preset', 'full_dbs',
                   ['full_dbs', 'reduced_dbs'],
                   'Choose preset MSA database configuration - '
@@ -440,7 +441,9 @@ def main(argv):
       template_featurizer=template_featurizer,
       use_small_bfd=use_small_bfd,
       use_precomputed_msas=FLAGS.use_precomputed_msas,
-      use_precomputed_final_msa = FLAGS.use_precomputed_final_msa)
+      use_precomputed_final_msa = FLAGS.use_precomputed_final_msa,
+      use_templates = FLAGS.use_templates
+  )
 
   if run_multimer_system:
     num_predictions_per_model = FLAGS.num_multimer_predictions_per_model

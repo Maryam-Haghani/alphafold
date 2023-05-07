@@ -140,7 +140,8 @@ class DataPipeline:
                mgnify_max_hits: int = 501,
                uniref_max_hits: int = 10000,
                use_precomputed_msas: bool = False,
-               use_precomputed_final_msa: bool = False):
+               use_precomputed_final_msa: bool = False,
+               use_templates: bool = True):
     """Initializes the data pipeline."""
     self._use_small_bfd = use_small_bfd
     self.jackhmmer_uniref90_runner = jackhmmer.Jackhmmer(
@@ -163,6 +164,7 @@ class DataPipeline:
     self.uniref_max_hits = uniref_max_hits
     self.use_precomputed_msas = use_precomputed_msas
     self.use_precomputed_final_msa = use_precomputed_final_msa
+    self.use_templates = use_templates
 
   def process(self, input_fasta_path: str, msa_output_dir: str) -> FeatureDict:
     """Runs alignment tools on the input sequence and creates features."""
@@ -179,7 +181,9 @@ class DataPipeline:
         description=input_descs[0],
         num_res=len(input_sequence))
 
-    uniref90_result_sto = self._get_uniref90_MSA(input_fasta_path, msa_output_dir)
+    uniref90_result_sto = None
+    if (not self.use_precomputed_final_msa) or self.use_templates:
+        uniref90_result_sto = self._get_uniref90_MSA(input_fasta_path, msa_output_dir)
 
     if not self.use_precomputed_final_msa:
         #find MSA features based on uniref90, mgnify and bfd
@@ -240,27 +244,32 @@ class DataPipeline:
       return bfd_msa
 
   def _find_templates(self, input_sequence, msa_output_dir, msa_for_templates):
-      msa_for_templates = parsers.deduplicate_stockholm_msa(msa_for_templates)
-      msa_for_templates = parsers.remove_empty_columns_from_stockholm_msa(
-          msa_for_templates)
-      if self.template_searcher.input_format == 'sto':
-          pdb_templates_result = self.template_searcher.query(msa_for_templates)
-      elif self.template_searcher.input_format == 'a3m':
-          uniref90_msa_as_a3m = parsers.convert_stockholm_to_a3m(msa_for_templates)
-          pdb_templates_result = self.template_searcher.query(uniref90_msa_as_a3m)
-      else:
-          raise ValueError('Unrecognized template input format: '
-                           f'{self.template_searcher.input_format}')
-      pdb_hits_out_path = os.path.join(
-          msa_output_dir, f'pdb_hits.{self.template_searcher.output_format}')
-      with open(pdb_hits_out_path, 'w') as f:
-          f.write(pdb_templates_result)
-      pdb_template_hits = self.template_searcher.get_template_hits(
-          output_string=pdb_templates_result, input_sequence=input_sequence)
+      if self.use_templates:
+          msa_for_templates = parsers.deduplicate_stockholm_msa(msa_for_templates)
+          msa_for_templates = parsers.remove_empty_columns_from_stockholm_msa(
+              msa_for_templates)
+          if self.template_searcher.input_format == 'sto':
+              pdb_templates_result = self.template_searcher.query(msa_for_templates)
+          elif self.template_searcher.input_format == 'a3m':
+              uniref90_msa_as_a3m = parsers.convert_stockholm_to_a3m(msa_for_templates)
+              pdb_templates_result = self.template_searcher.query(uniref90_msa_as_a3m)
+          else:
+              raise ValueError('Unrecognized template input format: '
+                               f'{self.template_searcher.input_format}')
+          pdb_hits_out_path = os.path.join(
+              msa_output_dir, f'pdb_hits.{self.template_searcher.output_format}')
+          with open(pdb_hits_out_path, 'w') as f:
+              f.write(pdb_templates_result)
 
-      templates_result = self.template_featurizer.get_templates(
-          query_sequence=input_sequence,
-          hits=pdb_template_hits)
+          pdb_template_hits = self.template_searcher.get_template_hits(
+              output_string=pdb_templates_result, input_sequence=input_sequence)
+          templates_result = self.template_featurizer.get_templates(
+              query_sequence=input_sequence,
+              hits=pdb_template_hits)
+      else:
+          templates_result = self.template_featurizer.get_templates(
+              query_sequence=input_sequence,
+              hits=[])
       return templates_result
 
   def _get_mgnigy_MSA(self, input_fasta_path, msa_output_dir):
