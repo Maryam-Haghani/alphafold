@@ -203,6 +203,7 @@ def parse_a3m(a3m_string: str, need_original_msa: bool = False) -> Msa:
     deletion_matrix.append(deletion_vec)
 
   # Make the MSA matrix out of aligned (deletion-free) sequences.
+  # Removes all lowercase letters from each sequence.
   deletion_table = str.maketrans('', '', string.ascii_lowercase)
   aligned_sequences = [s.translate(deletion_table) for s in sequences]
 

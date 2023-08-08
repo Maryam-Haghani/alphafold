@@ -141,29 +141,27 @@ def pad_features(feature: np.ndarray, feature_name: str) -> np.ndarray:
   return feats_padded
 
 # At present, this method is for default pairing method of msas:
-def _make_msa_df(chain_features: pipeline.FeatureDict, msa_output_dir, method) -> pd.DataFrame:
+#test
+def _make_msa_df(chain_features: pipeline.FeatureDict, msa_output_dir) -> pd.DataFrame:
   """Makes dataframe with msa features needed for msa pairing."""
-  per_seq_similarity = []
-  per_seq_gap = []
-  if method=='default':
-      chain_msa = chain_features['msa_all_seq']
-      query_seq = chain_msa[0]
-      per_seq_similarity = np.sum(
-          query_seq[None] == chain_msa, axis=-1) / float(len(query_seq))
-      per_seq_gap = np.sum(chain_msa == 21, axis=-1) / float(len(query_seq))
-      msa_df = pd.DataFrame({
-          'msa_species_identifiers':
-              chain_features['msa_species_identifiers_all_seq'],
-          'msa_row':
-              np.arange(len(
-                  chain_features['msa_species_identifiers_all_seq'])),
-          'seq_msa':
-              chain_features['seq_msa_all_seq'],
-          # 'msa':
-          #     chain_features['msa_all_seq'],
-          'msa_similarity': per_seq_similarity,
-          'gap': per_seq_gap
-      })
+  chain_msa = chain_features['msa_all_seq']
+  query_seq = chain_msa[0]
+  per_seq_similarity = np.sum(
+      query_seq[None] == chain_msa, axis=-1) / float(len(query_seq))
+  per_seq_gap = np.sum(chain_msa == 21, axis=-1) / float(len(query_seq))
+  msa_df = pd.DataFrame({
+      'msa_species_identifiers':
+          chain_features['msa_species_identifiers_all_seq'],
+      'msa_row':
+          np.arange(len(
+              chain_features['msa_species_identifiers_all_seq'])),
+      'seq_msa':
+          chain_features['seq_msa_all_seq'],
+      # 'msa':
+      #     chain_features['msa_all_seq'],
+      'msa_similarity': per_seq_similarity,
+      'gap': per_seq_gap
+  })
 
   msa_df_to_save = pd.DataFrame({
       'msa_row':
@@ -235,7 +233,7 @@ def pair_sequences(examples: List[pipeline.FeatureDict], msa_output_dir
   all_chain_species_dict = []
   common_species = set()
   for chain_features in examples:
-    msa_df = _make_msa_df(chain_features, msa_output_dir, method = 'default')
+    msa_df = _make_msa_df(chain_features, msa_output_dir)
     species_dict = _create_species_dict(msa_df)
     # save species in a df
     species = ([k, len(species_dict[k])] for k in species_dict)
@@ -247,13 +245,12 @@ def pair_sequences(examples: List[pipeline.FeatureDict], msa_output_dir
 
   common_species = sorted(common_species)
   common_species.remove(b'')  # Remove target sequence species.
-  df_common_species = pd.DataFrame(common_species)
-  df_common_species.to_csv(f"{msa_output_dir}/Changed/common_species.csv", index=False)
 
   all_paired_msa_rows = [np.zeros(len(examples), int)]
   all_paired_msa_rows_dict = {k: [] for k in range(num_examples)}
   all_paired_msa_rows_dict[num_examples] = [np.zeros(len(examples), int)]
 
+  kept_common_species = []
   for species in common_species:
     if not species:
       continue
@@ -275,9 +272,14 @@ def pair_sequences(examples: List[pipeline.FeatureDict], msa_output_dir
     if np.any(x > 600): #ignore species that have more than 600 sequences any of chains
       continue
 
+    kept_common_species.append(species)
+
     paired_msa_rows = _match_rows_by_sequence_similarity(this_species_msa_dfs)
     all_paired_msa_rows.extend(paired_msa_rows)
     all_paired_msa_rows_dict[species_dfs_present].extend(paired_msa_rows)
+
+  df_common_species = pd.DataFrame(kept_common_species)
+  df_common_species.to_csv(f"{msa_output_dir}/Changed/common_species.csv", index=False)
 
   all_paired_msa_rows_dict = {
       num_examples: np.array(paired_msa_rows) for
