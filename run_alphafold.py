@@ -106,11 +106,11 @@ flags.DEFINE_string('small_bfd_database_path', None, 'Path to the small '
                     'version of BFD used with the "reduced_dbs" preset.')
 flags.DEFINE_string('uniref30_database_path', uniclust30_database_path, 'Path to the UniRef30 '
                     'database for use by HHblits.')
-flags.DEFINE_string('uniprot_database_path', uniprot_database_path, 'Path to the Uniprot '
+flags.DEFINE_string('uniprot_database_path', None , 'Path to the Uniprot '
                     'database for use by JackHMMer.')
-flags.DEFINE_string('pdb70_database_path', None, 'Path to the PDB70 '
+flags.DEFINE_string('pdb70_database_path', pdb70_database_path, 'Path to the PDB70 '
                     'database for use by HHsearch.')
-flags.DEFINE_string('pdb_seqres_database_path', pdb_seqres_database_path, 'Path to the PDB '
+flags.DEFINE_string('pdb_seqres_database_path', None, 'Path to the PDB '
                     'seqres database for use by hmmsearch.')
 flags.DEFINE_string('template_mmcif_dir', template_mmcif_dir, 'Path to a directory with '
                     'template mmCIF structures, each named <pdb_id>.cif')
@@ -121,6 +121,8 @@ flags.DEFINE_string('obsolete_pdbs_path',obsolete_pdbs_path , 'Path to file cont
                     'replacements.')
 flags.DEFINE_boolean('use_templates', True, 'Whether to use templates for prediction or not.')
 flags.DEFINE_boolean('save_individual_msa', False, 'Whether  to save some supplementary files for each of the chains of target.')
+flags.DEFINE_boolean('save_final_msa', False, 'Whether  to save final MSA file')
+flags.DEFINE_boolean('only_features', False, 'Not predict structure, only get features')
 flags.DEFINE_enum('db_preset', 'full_dbs',
                   ['full_dbs', 'reduced_dbs'],
                   'Choose preset MSA database configuration - '
@@ -233,6 +235,9 @@ def predict_structure(
   features_output_path = os.path.join(os.path.join(output_dir, 'Changed'), 'features.pkl')
   with open(features_output_path, 'wb') as f:
     pickle.dump(feature_dict, f, protocol=4)
+
+  if FLAGS.only_features:
+      return
 
   unrelaxed_pdbs = {}
   unrelaxed_proteins = {}
@@ -444,7 +449,8 @@ def main(argv):
       use_precomputed_msas=FLAGS.use_precomputed_msas,
       use_precomputed_final_msa = FLAGS.use_precomputed_final_msa,
       use_templates = FLAGS.use_templates,
-      save_individual_msa = FLAGS.save_individual_msa
+      save_individual_msa = FLAGS.save_individual_msa,
+      save_final_msa = FLAGS.save_final_msa
   )
 
   if run_multimer_system:

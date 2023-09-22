@@ -52,13 +52,12 @@ def make_sequence_features(
   return features
 
 
-def make_msa_features(msas: Sequence[parsers.Msa]) -> FeatureDict:
+def make_msa_features(msas: Sequence[parsers.Msa], save_final_msa: bool, msa_output_dir: str) -> FeatureDict:
   """Constructs a feature dict of MSA features."""
   if not msas:
     raise ValueError('At least one MSA must be provided.')
 
   int_msa = []
-  int_original_msa = []
   seq_msa=[]
   seq_original_msa = []
   deletion_matrix = []
@@ -88,8 +87,6 @@ def make_msa_features(msas: Sequence[parsers.Msa]) -> FeatureDict:
       species_ids.append(identifiers.species_id.encode('utf-8'))
 
       if len(msa.original_sequences) > 0:
-        int_original_msa.append(
-            [residue_constants.HHBLITS_AA_TO_ID[res] for res in msa.original_sequences[sequence_index]])
         seq_original_msa.append(msa.original_sequences[sequence_index])
     msa_prop['msa_new_seq_count'] = msa_new_seq_count
     msa_props.append(msa_prop)
@@ -98,11 +95,18 @@ def make_msa_features(msas: Sequence[parsers.Msa]) -> FeatureDict:
   num_alignments = len(int_msa)
   features = {'deletion_matrix_int': np.array(deletion_matrix, dtype=np.int32),
               'msa': np.array(int_msa, dtype=np.int32),
-              'original_msa': np.array(int_original_msa, dtype=np.int32),
               'seq_original_msa': np.array(seq_original_msa, dtype=np.object_),
               'seq_msa': np.array(seq_msa, dtype=np.object_),
               'num_alignments': np.array([num_alignments] * num_res, dtype=np.int32),
               'msa_species_identifiers': np.array(species_ids, dtype=np.object_)}
+
+  if save_final_msa:
+      file_seq_msa= os.path.join(msa_output_dir, 'final_msa.aln')
+
+      with open(file_seq_msa, 'w') as file:
+          for item in seq_msa:
+              file.write(str(item) + '\n')
+
   return features, msa_props
 
 
@@ -154,7 +158,8 @@ class DataPipeline:
                use_precomputed_msas: bool = False,
                use_precomputed_final_msa: bool = False,
                use_templates: bool = True,
-               save_individual_msa:bool = False):
+               save_individual_msa:bool = False,
+               save_final_msa:bool = False):
     """Initializes the data pipeline."""
     self._use_small_bfd = use_small_bfd
     self.jackhmmer_uniref90_runner = jackhmmer.Jackhmmer(
@@ -179,6 +184,7 @@ class DataPipeline:
     self.use_precomputed_final_msa = use_precomputed_final_msa
     self.use_templates = use_templates
     self.save_individual_msa = save_individual_msa
+    self.save_final_msa = save_final_msa
 
   def process(self, input_fasta_path: str, msa_output_dir: str) -> FeatureDict:
     """Runs alignment tools on the input sequence and creates features."""
@@ -223,7 +229,7 @@ class DataPipeline:
                 parsed_msa = parsers.parse_a3m(msa_read[msa_format])
             msa.append(parsed_msa)
 
-    msa_features, msa_props = make_msa_features(msa)
+    msa_features, msa_props = make_msa_features(msa, self.save_final_msa, msa_output_dir)
 
     # To save individual msa
     if self.save_individual_msa:
