@@ -60,7 +60,7 @@ flags.DEFINE_list(
     'separated by commas. All FASTA paths must have a unique basename as the '
     'basename is used to name the output directories for each prediction.')
 
-data_dir = "/global/biodatabases/alphafold"
+data_dir = "/projects/protein-structure-prediction/AlphaFold-Data/"
 
 DOWNLOAD_DIR= data_dir
 uniprot_database_path = os.path.join(
@@ -68,13 +68,13 @@ uniprot_database_path = os.path.join(
 uniref90_database_path = os.path.join(
     DOWNLOAD_DIR, 'uniref90', 'uniref90.fasta')
 mgnify_database_path = os.path.join(
-    DOWNLOAD_DIR, 'mgnify', 'mgy_clusters.fa')
+    DOWNLOAD_DIR, 'mgnify', 'mgy_clusters_2022_05.fa')
 small_bfd_database_path = os.path.join(
     DOWNLOAD_DIR, 'small_bfd',    'bfd-first_non_consensus_sequences.fasta')
 bfd_database_path = os.path.join(
     DOWNLOAD_DIR, 'bfd',    'bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt')
 uniclust30_database_path = os.path.join(
-    DOWNLOAD_DIR, 'uniclust30', 'uniclust30_2018_08', 'uniclust30_2018_08')
+    DOWNLOAD_DIR, 'uniref30', 'UniRef30_2021_03')
 pdb70_database_path = os.path.join(DOWNLOAD_DIR, 'pdb70', 'pdb70')
 template_mmcif_dir = os.path.join(DOWNLOAD_DIR, 'pdb_mmcif', 'mmcif_files')
 obsolete_pdbs_path = os.path.join(DOWNLOAD_DIR, 'pdb_mmcif', 'obsolete.dat')
@@ -120,6 +120,7 @@ flags.DEFINE_string('obsolete_pdbs_path',obsolete_pdbs_path , 'Path to file cont
                     'mapping from obsolete PDB IDs to the PDB IDs of their '
                     'replacements.')
 flags.DEFINE_boolean('use_templates', True, 'Whether to use templates for prediction or not.')
+flags.DEFINE_boolean('no_MSA', False, 'Whether to use MSAs for prediction or not.')
 flags.DEFINE_boolean('save_individual_msa', False, 'Whether  to save some supplementary files for each of the chains of target.')
 flags.DEFINE_boolean('save_final_msa', False, 'Whether  to save final MSA file')
 flags.DEFINE_boolean('only_features', False, 'Not predict structure, only get features')
@@ -201,7 +202,6 @@ def _jnp_to_np(output: Dict[str, Any]) -> Dict[str, Any]:
     elif isinstance(v, jnp.ndarray):
       output[k] = np.array(v)
   return output
-
 
 def predict_structure(
     fasta_path: str,
@@ -449,6 +449,7 @@ def main(argv):
       use_precomputed_msas=FLAGS.use_precomputed_msas,
       use_precomputed_final_msa = FLAGS.use_precomputed_final_msa,
       use_templates = FLAGS.use_templates,
+      no_MSA = FLAGS.no_MSA,
       save_individual_msa = FLAGS.save_individual_msa,
       save_final_msa = FLAGS.save_final_msa
   )
@@ -514,6 +515,7 @@ def main(argv):
         benchmark=FLAGS.benchmark,
         random_seed=random_seed,
         models_to_relax=FLAGS.models_to_relax)
+    os.remove(path)
 
   print("*************************END of Changed******************************")
 if __name__ == '__main__':

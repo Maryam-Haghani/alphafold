@@ -21,6 +21,7 @@ from alphafold.common import residue_constants
 from alphafold.data import msa_identifiers
 from alphafold.data import parsers
 from alphafold.data import templates
+from alphafold.data.parsers import Msa
 from alphafold.data.tools import hhblits
 from alphafold.data.tools import hhsearch
 from alphafold.data.tools import hmmsearch
@@ -65,7 +66,6 @@ def make_msa_features(msas: Sequence[parsers.Msa], save_final_msa: bool, msa_out
   seen_sequences = set()
   msa_props = []
 
-
   for msa_index, msa in enumerate(msas):
     if not msa:
       raise ValueError(f'MSA {msa_index} must contain at least one sequence.')
@@ -90,7 +90,6 @@ def make_msa_features(msas: Sequence[parsers.Msa], save_final_msa: bool, msa_out
         seq_original_msa.append(msa.original_sequences[sequence_index])
     msa_prop['msa_new_seq_count'] = msa_new_seq_count
     msa_props.append(msa_prop)
-
   num_res = len(msas[0].sequences[0])
   num_alignments = len(int_msa)
   features = {'deletion_matrix_int': np.array(deletion_matrix, dtype=np.int32),
@@ -138,6 +137,16 @@ def read_msa(msa_format, msa_out_path, max_sto_sequences: Optional[int] = None):
             result = {msa_format: f.read()}
     return result
 
+def read_fasta_file(fasta_file_path: str):
+  with open(fasta_file_path, "r") as fasta_file:
+      lines = fasta_file.readlines()
+      for line in lines:
+          if line.startswith(">"):  # Header line, skipping it
+              header = line[1:].strip()
+          else:
+              sequence = line.strip()
+  return header, sequence
+
 
 class DataPipeline:
   """Runs the alignment tools and assembles the input features."""
@@ -158,6 +167,7 @@ class DataPipeline:
                use_precomputed_msas: bool = False,
                use_precomputed_final_msa: bool = False,
                use_templates: bool = True,
+               no_MSA: bool = False,
                save_individual_msa:bool = False,
                save_final_msa:bool = False):
     """Initializes the data pipeline."""
@@ -184,6 +194,7 @@ class DataPipeline:
     self.use_precomputed_final_msa = use_precomputed_final_msa
     self.use_templates = use_templates
     self.save_individual_msa = save_individual_msa
+    self.no_MSA = no_MSA
     self.save_final_msa = save_final_msa
 
   def process(self, input_fasta_path: str, msa_output_dir: str) -> FeatureDict:
@@ -200,37 +211,42 @@ class DataPipeline:
         sequence=input_sequence,
         description=input_descs[0],
         num_res=len(input_sequence))
-
     uniref90_result_sto = None
-    if (not self.use_precomputed_final_msa) or self.use_templates:
-        uniref90_result_sto = self._get_uniref90_MSA(input_fasta_path, msa_output_dir)
-
-    if not self.use_precomputed_final_msa:
-        #find MSA features based on uniref90, mgnify and bfd
-        uniref90_msa = parsers.parse_stockholm(uniref90_result_sto)
-        logging.info('Uniref90 MSA size: %d sequences.', len(uniref90_msa))
-
-        mgnify_msa = self._get_mgnigy_MSA(input_fasta_path, msa_output_dir)
-        logging.info('MGnify MSA size: %d sequences.', len(mgnify_msa))
-
-        bfd_msa = self._get_bfd_MSA(input_fasta_path, msa_output_dir)
-        logging.info('BFD MSA size: %d sequences.', len(bfd_msa))
-        msa = (uniref90_msa, bfd_msa, mgnify_msa)
+    if self.no_MSA:
+        header, sequence = read_fasta_file(input_fasta_path)
+        length = len(sequence)
+        msa = [Msa(sequences=[sequence],
+            deletion_matrix=[np.zeros(length, dtype=int).tolist()],
+            descriptions=[header])]
     else:
-        msa = []
-        # find MSA features based on pre_computed MSAs
-        msa_path = os.path.join(msa_output_dir, 'MSAs')
-        for msa_file in sorted(os.listdir(msa_path)):
-            msa_format = msa_file.split('.')[1]
-            msa_read = read_msa(msa_format, os.path.join(msa_path, msa_file))
-            if msa_format == 'sto':
-                parsed_msa = parsers.parse_stockholm(msa_read[msa_format])
-            elif msa_format == 'a3m':
-                parsed_msa = parsers.parse_a3m(msa_read[msa_format])
-            msa.append(parsed_msa)
+        if (not self.use_precomputed_final_msa) or self.use_templates:
+            uniref90_result_sto = self._get_uniref90_MSA(input_fasta_path, msa_output_dir)
+
+        if not self.use_precomputed_final_msa:
+            #find MSA features based on uniref90, mgnify and bfd
+            uniref90_msa = parsers.parse_stockholm(uniref90_result_sto)
+            logging.info('Uniref90 MSA size: %d sequences.', len(uniref90_msa))
+
+            mgnify_msa = self._get_mgnigy_MSA(input_fasta_path, msa_output_dir)
+            logging.info('MGnify MSA size: %d sequences.', len(mgnify_msa))
+
+            bfd_msa = self._get_bfd_MSA(input_fasta_path, msa_output_dir)
+            logging.info('BFD MSA size: %d sequences.', len(bfd_msa))
+            msa = (uniref90_msa, bfd_msa, mgnify_msa)
+        else: #use_precomputed_final_msa
+            msa = []
+            # find MSA features based on pre_computed MSAs
+            msa_path = os.path.join(msa_output_dir, 'MSAs')
+            for msa_file in sorted(os.listdir(msa_path)):
+                msa_format = msa_file.split('.')[1]
+                msa_read = read_msa(msa_format, os.path.join(msa_path, msa_file))
+                if msa_format == 'sto':
+                    parsed_msa = parsers.parse_stockholm(msa_read[msa_format])
+                elif msa_format == 'a3m':
+                    parsed_msa = parsers.parse_a3m(msa_read[msa_format])
+                msa.append(parsed_msa)
 
     msa_features, msa_props = make_msa_features(msa, self.save_final_msa, msa_output_dir)
-
     # To save individual msa
     if self.save_individual_msa:
         supplementary = os.path.join(msa_output_dir, 'supplementary_files')
