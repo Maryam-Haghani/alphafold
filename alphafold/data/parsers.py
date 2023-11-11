@@ -87,8 +87,14 @@ def parse_fasta(fasta_string: str) -> Tuple[Sequence[str], Sequence[str]]:
   sequences = []
   descriptions = []
   index = -1
+  start_of_file = True # skip starting rows until the first sequence
   for line in fasta_string.splitlines():
     line = line.strip()
+    if start_of_file:
+      if not line.startswith('>'):
+        continue
+      else: # first header sequence
+        start_of_file = False
     if line.startswith('>'):
       index += 1
       descriptions.append(line[1:])  # Remove the '>' at the beginning.
