@@ -176,8 +176,12 @@ class DataPipeline:
                uniprot_database_path: str,
                max_uniprot_hits: int = 50000,
                use_precomputed_msas: bool = False,
+               use_pairing: bool = True,
                use_precomputed_paired_msa: bool = False,
-               precomputed_paired_msa_file: str = ''):
+               precomputed_paired_msa_file: str = '',
+               save_chain_msa = False,
+               save_multimer_msa= False
+               ):
     """Initializes the data pipeline.
 
     Args:
@@ -187,9 +191,12 @@ class DataPipeline:
       uniprot_database_path: Location of the unclustered uniprot sequences, that
         will be searched with jackhmmer and used for MSA pairing.
       max_uniprot_hits: The maximum number of hits to return from uniprot.
+      use_pairing: Whether to use pairing for multimers or not
       use_precomputed_msas: Whether to use pre-existing MSAs; see run_alphafold.
       use_precomputed_paired_msa: Whether to use pre-existing paired-MSA
       precomputed_paired_msa_file
+      save_chain_msa: Whether to save pairing msa
+      save_multimer_msa: Whether to save final msa of multimer
     """
     self._monomer_data_pipeline = monomer_data_pipeline
     self._uniprot_msa_runner = jackhmmer.Jackhmmer(
@@ -197,8 +204,11 @@ class DataPipeline:
         database_path=uniprot_database_path)
     self._max_uniprot_hits = max_uniprot_hits
     self.use_precomputed_msas = use_precomputed_msas
+    self.use_pairing = use_pairing
     self.use_precomputed_paired_msa = use_precomputed_paired_msa
     self.precomputed_paired_msa_file = precomputed_paired_msa_file
+    self.save_chain_msa = save_chain_msa
+    self.save_multimer_msa = save_multimer_msa
 
   def _process_single_chain(
       self,
@@ -219,9 +229,8 @@ class DataPipeline:
           input_fasta_path=chain_fasta_path,
           msa_output_dir=chain_msa_output_dir)
 
-      # We only construct the pairing features if there are 2 or more unique
-      # sequences -> For now. only consider hetero-dimers
-      if not is_homomer_or_monomer and (not self.use_precomputed_paired_msa):
+      # We only construct the pairing features if there are 2 or more unique sequences
+      if not is_homomer_or_monomer and self.use_pairing and (not self.use_precomputed_paired_msa):
         all_seq_msa_features = self._all_seq_msa_features(chain_fasta_path, chain_msa_output_dir)
         chain_features.update(all_seq_msa_features)
         chain_features['chain_id'] = chain_id
@@ -235,7 +244,8 @@ class DataPipeline:
         self.use_precomputed_msas)
     msa = parsers.parse_stockholm(result['sto'], need_original_msa= True)
     msa = msa.truncate(max_seqs=self._max_uniprot_hits)
-    all_seq_features, msa_props = pipeline.make_msa_features([msa])
+    all_seq_features = pipeline.make_msa_features([msa], msa_output_dir, "pairing_msa", self.save_chain_msa)
+
     valid_feats = msa_pairing.MSA_FEATURES + (
       'msa_species_identifiers', 'seq_msa', 'original_msa', 'seq_original_msa'
     )
@@ -274,8 +284,7 @@ class DataPipeline:
           msa_output_dir=msa_output_dir,
           is_homomer_or_monomer=is_homomer_or_monomer)
 
-      chain_features = convert_monomer_features(chain_features,
-                                                chain_id=chain_id)
+      chain_features = convert_monomer_features(chain_features, chain_id=chain_id)
       all_chain_features[chain_id] = chain_features
       sequence_features[fasta_chain.sequence] = chain_features
 
@@ -283,8 +292,10 @@ class DataPipeline:
 
     np_example = feature_processing.process_features(all_chain_features=all_chain_features,
                                                      msa_output_dir=msa_output_dir,
+                                                     use_pairing= self.use_pairing,
                                                      use_precomputed_paired_msa = self.use_precomputed_paired_msa,
-                                                     precomputed_paired_msa_file = self.precomputed_paired_msa_file)
+                                                     precomputed_paired_msa_file = self.precomputed_paired_msa_file,
+                                                     save_multimer_msa = self.save_multimer_msa)
 
     # Pad MSA to avoid zero-sized extra_msa.
     np_example = pad_msa(np_example, 512)

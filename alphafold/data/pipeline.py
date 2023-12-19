@@ -52,8 +52,7 @@ def make_sequence_features(
   features['sequence'] = np.array([sequence.encode('utf-8')], dtype=np.object_)
   return features
 
-
-def make_msa_features(msas: Sequence[parsers.Msa], save_final_msa: bool, msa_output_dir: str) -> FeatureDict:
+def make_msa_features(msas: Sequence[parsers.Msa], msa_output_dir, file_name, save_chain_msa) -> FeatureDict:
   """Constructs a feature dict of MSA features."""
   if not msas:
     raise ValueError('At least one MSA must be provided.')
@@ -99,14 +98,13 @@ def make_msa_features(msas: Sequence[parsers.Msa], save_final_msa: bool, msa_out
               'num_alignments': np.array([num_alignments] * num_res, dtype=np.int32),
               'msa_species_identifiers': np.array(species_ids, dtype=np.object_)}
 
-  if save_final_msa:
-      file_seq_msa= os.path.join(msa_output_dir, 'final_msa.aln')
+  supplementary_path = os.path.join(msa_output_dir, 'supplementary_files')
+  os.makedirs(supplementary_path, exist_ok=True)
+  save_msa_properties(msa_props, supplementary_path, file_name)
 
-      with open(file_seq_msa, 'w') as file:
-          for item in seq_msa:
-              file.write(str(item) + '\n')
-
-  return features, msa_props
+  if save_chain_msa:
+      save_chain_msa_to_file(features, supplementary_path, file_name)
+  return features
 
 
 def run_msa_tool(msa_runner, input_fasta_path: str, msa_out_path: str,
@@ -147,6 +145,25 @@ def read_fasta_file(fasta_file_path: str):
               sequence = line.strip()
   return header, sequence
 
+# save properties of each MSA database:
+def save_msa_properties(msa_props, supplementary_path, file_name):
+  # save msa properties to file
+  with open(os.path.join(supplementary_path, f"{file_name}_props.txt"), 'w') as outfile:
+      json.dump(msa_props, outfile)
+
+def save_chain_msa_to_file(msa_features, msa_supplementary_dir, file_name):
+  msa_df_to_save = pd.DataFrame({
+      'msa': [" ".join([str(res) for res in seq]) for seq in msa_features['msa']],
+      'seq_msa': msa_features['seq_msa'],
+      'msa_species_identifiers': msa_features['msa_species_identifiers']
+  })
+  msa_df_to_save.to_csv(os.path.join(msa_supplementary_dir, f"final_{file_name}.csv"), index=False)
+
+  file_msa = os.path.join(msa_supplementary_dir, f"final_{file_name}.aln")
+  with open(file_msa, 'w') as file:
+      for item in msa_features['seq_msa']:
+          file.write(str(item) + '\n')
+
 
 class DataPipeline:
   """Runs the alignment tools and assembles the input features."""
@@ -165,11 +182,10 @@ class DataPipeline:
                mgnify_max_hits: int = 501,
                uniref_max_hits: int = 10000,
                use_precomputed_msas: bool = False,
-               use_precomputed_final_msa: bool = False,
+               use_precomputed_msas_from_dir: bool = False,
                use_templates: bool = True,
                no_MSA: bool = False,
-               save_individual_msa:bool = False,
-               save_final_msa:bool = False):
+               save_chain_msa:bool = False):
     """Initializes the data pipeline."""
     self._use_small_bfd = use_small_bfd
     self.jackhmmer_uniref90_runner = jackhmmer.Jackhmmer(
@@ -191,11 +207,10 @@ class DataPipeline:
     self.mgnify_max_hits = mgnify_max_hits
     self.uniref_max_hits = uniref_max_hits
     self.use_precomputed_msas = use_precomputed_msas
-    self.use_precomputed_final_msa = use_precomputed_final_msa
+    self.use_precomputed_msas_from_dir = use_precomputed_msas_from_dir
     self.use_templates = use_templates
-    self.save_individual_msa = save_individual_msa
     self.no_MSA = no_MSA
-    self.save_final_msa = save_final_msa
+    self.save_chain_msa = save_chain_msa
 
   def process(self, input_fasta_path: str, msa_output_dir: str) -> FeatureDict:
     """Runs alignment tools on the input sequence and creates features."""
@@ -219,10 +234,10 @@ class DataPipeline:
             deletion_matrix=[np.zeros(length, dtype=int).tolist()],
             descriptions=[header])]
     else:
-        if (not self.use_precomputed_final_msa) or self.use_templates:
+        if (not self.use_precomputed_msas_from_dir) or self.use_templates:
             uniref90_result_sto = self._get_uniref90_MSA(input_fasta_path, msa_output_dir)
 
-        if not self.use_precomputed_final_msa:
+        if not self.use_precomputed_msas_from_dir:
             #find MSA features based on uniref90, mgnify and bfd
             uniref90_msa = parsers.parse_stockholm(uniref90_result_sto)
             logging.info('Uniref90 MSA size: %d sequences.', len(uniref90_msa))
@@ -233,29 +248,22 @@ class DataPipeline:
             bfd_msa = self._get_bfd_MSA(input_fasta_path, msa_output_dir)
             logging.info('BFD MSA size: %d sequences.', len(bfd_msa))
             msa = (uniref90_msa, bfd_msa, mgnify_msa)
-        else: #use_precomputed_final_msa
+        else: #use_precomputed_msas_from_dir
             msa = []
             # find MSA features based on pre_computed MSAs
-            msa_path = os.path.join(msa_output_dir, 'MSAs')
-            for msa_file in sorted(os.listdir(msa_path)):
-                msa_format = msa_file.split('.')[1]
-                msa_read = read_msa(msa_format, os.path.join(msa_path, msa_file))
+            precomputed_msa_path = os.path.join(msa_output_dir, 'MSAs')
+            for msa_file in sorted(os.listdir(precomputed_msa_path)):
+                msa_format = msa_file.split('.')[-1]
+                msa_read = read_msa(msa_format, os.path.join(precomputed_msa_path, msa_file))
                 if msa_format == 'sto':
                     parsed_msa = parsers.parse_stockholm(msa_read[msa_format])
                 elif msa_format == 'a3m':
                     parsed_msa = parsers.parse_a3m(msa_read[msa_format])
+                else:
+                    continue
                 msa.append(parsed_msa)
 
-    msa_features, msa_props = make_msa_features(msa, self.save_final_msa, msa_output_dir)
-    # To save individual msa
-    if self.save_individual_msa:
-        supplementary = os.path.join(msa_output_dir, 'supplementary_files')
-        os.makedirs(supplementary ,exist_ok=True)
-        # save msa properties to file
-        with open(os.path.join(supplementary, "individual_msa_props.txt"), 'w') as outfile:
-            json.dump(msa_props, outfile)
-        # save msa to file
-        self._save_msa_to_file(msa_features, supplementary)
+    msa_features = make_msa_features(msa, msa_output_dir, "individual_msa", self.save_chain_msa)
 
     # Find template features based on uniref90 MSAs
     templates_result = self._find_templates(input_sequence, msa_output_dir, uniref90_result_sto)
@@ -267,15 +275,6 @@ class DataPipeline:
                  msa_features['num_alignments'][0])
 
     return {**sequence_features, **msa_features, **templates_result.features}
-
-  def _save_msa_to_file(self, msa_features, msa_output_dir):
-      msa_df_to_save = pd.DataFrame({
-          'msa': [" ".join([str(res) for res in seq]) for seq in msa_features['msa']],
-          'seq_msa': msa_features['seq_msa'],
-          'msa_species_identifiers': msa_features['msa_species_identifiers']
-      })
-
-      msa_df_to_save.to_csv(f"{msa_output_dir}/concat_msa.csv", index=False)
 
   def _get_bfd_MSA(self, input_fasta_path, msa_output_dir):
       if self._use_small_bfd:

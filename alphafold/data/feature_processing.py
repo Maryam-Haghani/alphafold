@@ -15,7 +15,7 @@
 """Feature processing logic for multimer data pipeline."""
 import os
 from typing import Iterable, MutableMapping, List
-
+from alphafold.data import msa_identifiers
 from alphafold.common import residue_constants
 from alphafold.data import msa_pairing
 from alphafold.data import pipeline
@@ -45,17 +45,27 @@ def _is_homomer_or_monomer(chains: Iterable[pipeline.FeatureDict]) -> bool:
        chain in chains])))
   return num_unique_chains == 1
 
+# make paired query sequence when pairing is set to False
+def make_paired_query(np_chains_list):
+    fasta_paired_sequence = "query_seq\t"
+    for chain_features in np_chains_list:
+        fasta_paired_sequence += chain_features['sequence'].item().decode('utf-8')
+    return fasta_paired_sequence
+
+
 def process_features(
-    all_chain_features: MutableMapping[str, pipeline.FeatureDict], msa_output_dir, use_precomputed_paired_msa,
-    precomputed_paired_msa_file
+    all_chain_features: MutableMapping[str, pipeline.FeatureDict], msa_output_dir, use_pairing,
+        use_precomputed_paired_msa, precomputed_paired_msa_file, save_multimer_msa
     ) -> pipeline.FeatureDict:
     """Runs processing on features to augment, pair and merge.
 
     Args:
       all_chain_features: A MutableMap of dictionaries of features for each chain.
       msa_output_dir
+      use_pairing
       use_precomputed_paired_msa
       precomputed_paired_msa_file
+      save_multimer_msa
     Returns:
       A dictionary of features.
     """
@@ -63,59 +73,107 @@ def process_features(
     process_unmerged_features(all_chain_features)
 
     np_chains_list = list(all_chain_features.values())
-
-    pair_msa_sequences = not _is_homomer_or_monomer(np_chains_list)
-    if pair_msa_sequences:
-        if not use_precomputed_paired_msa:
-            np_chains_list = msa_pairing.create_paired_features(
-                chains=np_chains_list, msa_output_dir=msa_output_dir)
+    is_heteromer = not _is_homomer_or_monomer(np_chains_list)
+    if is_heteromer:
+        if use_pairing:
+            if not use_precomputed_paired_msa:
+                np_chains_list = msa_pairing.create_paired_features(
+                    chains=np_chains_list, msa_output_dir=msa_output_dir)
+            else:
+                #read msa file and parse that based on Msa
+                paired_msa_format = precomputed_paired_msa_file.split('.')[-1]
+                paired_msa = pipeline.read_msa(paired_msa_format, precomputed_paired_msa_file)
+                paired_msa = parsers.parse_stockholm(paired_msa['sto'])
+                np_chains_list = make_paired_msa_features(np_chains_list, paired_msa)
         else:
-            #read msa file and parse than based on Msa
-            msa_file = os.path.join(msa_output_dir, precomputed_paired_msa_file)
-            msa_format = precomputed_paired_msa_file.split('.')[1]
-            msa = pipeline.read_msa(msa_format, msa_file)
-            msa = parsers.parse_stockholm(msa['txt'])
-            all_seq_features, msa_pros = pipeline.make_msa_features([msa])
-            valid_feats = msa_pairing.MSA_FEATURES + (
-                'msa_species_identifiers', 'seq_msa', 'num_alignments'
-            )
-            paired_features = {f'{k}_all_seq': v for k, v in all_seq_features.items()
-                     if k in valid_feats}
-            index = 0
-            for chains_feature in np_chains_list:
-                num_residues = len(chains_feature['aatype'])
-                current_paired_features = paired_features.copy()
-                num_alignments = len(current_paired_features['msa_all_seq'])
-                current_paired_features['num_alignments_all_seq'] = np.asarray(num_alignments, dtype=np.int32)
-                current_paired_features['msa_all_seq'] = paired_features['msa_all_seq'][
-                                                                    :, index: index + num_residues]
-                current_paired_features['deletion_matrix_all_seq'] = np.asarray(
-                    paired_features['deletion_matrix_int_all_seq'][:, index: index + num_residues], dtype=np.float32)
-
-                chains_feature.update(current_paired_features)
-                index += num_residues
+            # only pair query sequences
+            paired_query = make_paired_query(np_chains_list)
+            paired_query_msa = parsers.parse_stockholm(paired_query)
+            np_chains_list = make_paired_msa_features(np_chains_list, paired_query_msa)
 
         np_chains_list = msa_pairing.deduplicate_unpaired_sequences(np_chains_list)
 
     np_chains_list = crop_chains(
       np_chains_list,
       msa_crop_size=MSA_CROP_SIZE,
-      pair_msa_sequences=pair_msa_sequences,
+      pair_msa_sequences=is_heteromer,
       max_templates=MAX_TEMPLATES)
+
     np_example = msa_pairing.merge_chain_features(
-      np_chains_list=np_chains_list, pair_msa_sequences=pair_msa_sequences,
-      max_templates=MAX_TEMPLATES)
+        np_chains_list=np_chains_list, pair_msa_sequences=is_heteromer,
+        max_templates=MAX_TEMPLATES)
 
     # add seq_msa to features
-    l = []
+    seq_msa = []
     for msa in np_example['msa']:
-        l.append(np.array([residue_constants.ID_TO_HHBLITS_AA[x] for x in msa]))
-    np_example['seq_msa'] = np.array(l)
+        seq_msa.append(np.array([residue_constants.ID_TO_HHBLITS_AA[x] for x in msa]))
+    np_example['seq_msa'] = np.array(seq_msa)
+
+    if save_multimer_msa:
+        with open(os.path.join(msa_output_dir, 'final_msa.aln'), 'w') as f:
+            for seq in np_example['seq_msa']:
+                f.write(''.join(map(str, seq)) + '\n')
 
     np_example = process_final(np_example)
-
     return np_example
 
+
+def make_paired_msa_features(np_chains_list: Iterable[pipeline.FeatureDict], msa: parsers.Msa):
+    """Constructs a feature dict of Paired MSA features."""
+    int_msa = []
+    seq_msa = []
+    seq_original_msa = []
+    deletion_matrix = []
+    species_ids = []
+    seen_sequences = set()
+
+    if not msa:
+        raise ValueError(f'MSA must contain at least one sequence.')
+
+    for sequence_index, sequence in enumerate(msa.sequences):
+        if sequence in seen_sequences:
+            continue
+        seen_sequences.add(sequence)
+        int_msa.append(
+            [residue_constants.HHBLITS_AA_TO_ID[res] for res in sequence])
+        seq_msa.append(sequence)
+        deletion_matrix.append(msa.deletion_matrix[sequence_index])
+        identifiers = msa_identifiers.get_identifiers(msa.descriptions[sequence_index])
+        species_ids.append(identifiers.species_id.encode('utf-8'))
+
+        if len(msa.original_sequences) > 0:
+            seq_original_msa.append(msa.original_sequences[sequence_index])
+
+    num_res = len(msa.sequences[0])
+    num_alignments = len(int_msa)
+
+    all_seq_features = {'deletion_matrix_int': np.array(deletion_matrix, dtype=np.int32),
+                'msa': np.array(int_msa, dtype=np.int32),
+                'seq_original_msa': np.array(seq_original_msa, dtype=np.object_),
+                'seq_msa': np.array(seq_msa, dtype=np.object_),
+                'num_alignments': np.array([num_alignments] * num_res, dtype=np.int32),
+                'msa_species_identifiers': np.array(species_ids, dtype=np.object_)}
+
+    valid_feats = msa_pairing.MSA_FEATURES + (
+        'msa_species_identifiers', 'seq_msa', 'num_alignments'
+    )
+    paired_features = {f'{k}_all_seq': v for k, v in all_seq_features.items()
+                       if k in valid_feats}
+    index = 0
+    for chains_feature in np_chains_list:
+        num_residues = len(chains_feature['aatype'])
+        current_paired_features = paired_features.copy()
+        num_alignments = len(current_paired_features['msa_all_seq'])
+        current_paired_features['num_alignments_all_seq'] = np.asarray(num_alignments, dtype=np.int32)
+        current_paired_features['msa_all_seq'] = paired_features['msa_all_seq'][
+                                                 :, index: index + num_residues]
+        current_paired_features['deletion_matrix_all_seq'] = np.asarray(
+            paired_features['deletion_matrix_int_all_seq'][:, index: index + num_residues], dtype=np.float32)
+
+        chains_feature.update(current_paired_features)
+        index += num_residues
+
+    return np_chains_list
 
 def crop_chains(
     chains_list: List[pipeline.FeatureDict],
@@ -133,7 +191,6 @@ def crop_chains(
   Returns:
     The chains cropped.
   """
-
   # Apply the cropping.
   cropped_chains = []
   for chain in chains_list:
@@ -162,10 +219,8 @@ def _crop_single_chain(chain: pipeline.FeatureDict,
     # sequence from this chain's MSA is included in the paired MSA.  This keeps
     # the MSA size for each chain roughly constant.
     msa_all_seq = chain['msa_all_seq'][:msa_crop_size_all_seq, :]
-    num_non_gapped_pairs = np.sum(
-        np.any(msa_all_seq != msa_pairing.MSA_GAP_IDX, axis=1))
-    num_non_gapped_pairs = np.minimum(num_non_gapped_pairs,
-                                      msa_crop_size_all_seq)
+    num_non_gapped_pairs = np.sum(np.any(msa_all_seq != msa_pairing.MSA_GAP_IDX, axis=1))
+    num_non_gapped_pairs = np.minimum(num_non_gapped_pairs, msa_crop_size_all_seq)
 
     # Restrict the unpaired crop size so that paired+unpaired sequences do not
     # exceed msa_seqs_per_chain for each chain.
@@ -265,3 +320,5 @@ def process_unmerged_features(
   for chain_features in all_chain_features.values():
     chain_features['entity_mask'] = (
         chain_features['entity_id'] != 0).astype(np.int32)
+
+
