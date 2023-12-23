@@ -23,7 +23,6 @@ import shutil
 import sys
 import time
 from typing import Any, Dict, Mapping, Union
-
 from absl import app
 from absl import flags
 from absl import logging
@@ -73,8 +72,8 @@ small_bfd_database_path = os.path.join(
     DOWNLOAD_DIR, 'small_bfd',    'bfd-first_non_consensus_sequences.fasta')
 bfd_database_path = os.path.join(
     DOWNLOAD_DIR, 'bfd',    'bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt')
-uniclust30_database_path = os.path.join(
-    DOWNLOAD_DIR, 'uniref30', 'UniRef30_2021_03')
+uniclust30_database_path = os.path.join(DOWNLOAD_DIR, 'uniref30-2023', 'UniRef30_2023_02')
+# DOWNLOAD_DIR, 'uniref30', 'UniRef30_2021_03')
 pdb70_database_path = os.path.join(DOWNLOAD_DIR, 'pdb70', 'pdb70')
 template_mmcif_dir = os.path.join(DOWNLOAD_DIR, 'pdb_mmcif', 'mmcif_files')
 obsolete_pdbs_path = os.path.join(DOWNLOAD_DIR, 'pdb_mmcif', 'obsolete.dat')
@@ -323,22 +322,26 @@ def predict_structure(
   elif models_to_relax == ModelsToRelax.NONE:
     to_relax = []
 
-  for model_name in to_relax:
-    t_0 = time.time()
-    relaxed_pdb_str, _, violations = amber_relaxer.process(
-        prot=unrelaxed_proteins[model_name])
-    relax_metrics[model_name] = {
-        'remaining_violations': violations,
-        'remaining_violations_count': sum(violations)
-    }
-    timings[f'relax_{model_name}'] = time.time() - t_0
 
-    relaxed_pdbs[model_name] = relaxed_pdb_str
+  try:
+      for model_name in to_relax:
+        t_0 = time.time()
+        relaxed_pdb_str, _, violations = amber_relaxer.process(
+            prot=unrelaxed_proteins[model_name])
+        relax_metrics[model_name] = {
+            'remaining_violations': violations,
+            'remaining_violations_count': sum(violations)
+        }
+        timings[f'relax_{model_name}'] = time.time() - t_0
 
-    # Save the relaxed PDB.
-    relaxed_output_path = os.path.join(output_dir, f'relaxed_{model_name}.pdb')
-    with open(relaxed_output_path, 'w') as f:
-      f.write(relaxed_pdb_str)
+        relaxed_pdbs[model_name] = relaxed_pdb_str
+
+        # Save the relaxed PDB.
+        relaxed_output_path = os.path.join(output_dir, f'relaxed_{model_name}.pdb')
+        with open(relaxed_output_path, 'w') as f:
+          f.write(relaxed_pdb_str)
+  except:
+      pass
 
   # Write out relaxed PDBs in rank order.
   for idx, model_name in enumerate(ranked_order):
@@ -368,10 +371,6 @@ def predict_structure(
 
 def main(argv):
   print("Hi Maryam!")
-  print("***********************************************")
-  print("Running changed code!")
-  print("***********************************************")
-  print("***********************************************")
 
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
@@ -410,17 +409,6 @@ def main(argv):
     num_ensemble = 8
   else:
     num_ensemble = 1
-  is_fasta_path_dir = False
-  #check to get contents of directory as fasta files if it is a dir name:
-  if (FLAGS.fasta_paths)[0].endswith('.fasta'):
-      fasta_names = [pathlib.Path(p).stem for p in FLAGS.fasta_paths]
-  else:
-      fasta_names = [s.strip('.fasta') for s in os.listdir(FLAGS.fasta_paths[0])]
-      is_fasta_path_dir = True
-
-  # Check for duplicate FASTA file names.
-  if len(fasta_names) != len(set(fasta_names)):
-    raise ValueError('All FASTA paths must have a unique basename.')
 
   if run_multimer_system:
     template_searcher = hmmsearch.Hmmsearch(
@@ -515,14 +503,26 @@ def main(argv):
     random_seed = random.randrange(sys.maxsize // len(model_runners))
   logging.info('Using random seed %d for the data pipeline', random_seed)
 
-  # Predict structure for each of the sequences.
+  # Predict structure for each of the fasta sequences.
+  is_fasta_path_dir = False
+  #check to get contents of directory as fasta files if it is a dir name:
+  if (FLAGS.fasta_paths)[0].endswith('.fasta'):
+      fasta_names = [pathlib.Path(p).stem for p in FLAGS.fasta_paths]
+  else:
+      fasta_names = [s.strip('.fasta') for s in os.listdir(FLAGS.fasta_paths[0])]
+      is_fasta_path_dir = True
+
+  # Check for duplicate FASTA file names.
+  if len(fasta_names) != len(set(fasta_names)):
+    raise ValueError('All FASTA paths must have a unique basename.')
+
   for fasta_name in fasta_names:
+    logging.info(f'***************************{fasta_name}********************************')
     if is_fasta_path_dir :
         path = FLAGS.fasta_paths[0]+'/'+fasta_name+'.fasta'
     else:
         path = FLAGS.fasta_paths[0]
-    print('***************************START********************************')
-    print(path)
+
     predict_structure(
         fasta_path=path,
         fasta_name=fasta_name,
@@ -534,11 +534,20 @@ def main(argv):
         random_seed=random_seed,
         models_to_relax=FLAGS.models_to_relax)
 
-    # delete the predicted fasta file from fasta folder
+
     if is_fasta_path_dir:
+        # if FLAGS.only_features:
+        #     # move the fasta with MSAs generated to prediction folders
+        #     shutil.copy(path, '/projects/protein-structure-prediction/HostViralComplexes/Completed-Fastas-Pairing/')
+        #     shutil.copy(path, '/projects/protein-structure-prediction/HostViralComplexes/Completed-Fastas-NoPairing/')
+        #     shutil.copytree(f'/projects/protein-structure-prediction/HostViralComplexes/AF-Individual-MSAs/{fasta_name}',
+        #                 f'/projects/protein-structure-prediction/HostViralComplexes/Predictions/AF-Pairing/{fasta_name}')
+        #     shutil.copytree(f'/projects/protein-structure-prediction/HostViralComplexes/AF-Individual-MSAs/{fasta_name}',
+        #                 f'/projects/protein-structure-prediction/HostViralComplexes/Predictions/AF-NoPairing/{fasta_name}')
+        # delete the predicted fasta file from fasta folder
         os.remove(path)
 
-  print("*************************END of CODE******************************")
+  logging.info("*************************END of CODE******************************")
 if __name__ == '__main__':
   flags.mark_flags_as_required([
       'fasta_paths',
