@@ -454,8 +454,9 @@ def main(argv):
 
   if run_multimer_system:
     if FLAGS.use_precomputed_paired_msa:
-          if FLAGS.precomputed_paired_msa_file.split('.')[-1] != 'sto':
-              raise ValueError(f'precomputed_paired_msa_file should have sto file format')
+          if (FLAGS.precomputed_paired_msa_file.split('.')[-1] != 'sto')\
+                  and (FLAGS.precomputed_paired_msa_file.split('.')[-1] != 'txt'):
+              raise ValueError(f'precomputed_paired_msa_file should have sto or txt file format')
 
     num_predictions_per_model = FLAGS.num_multimer_predictions_per_model
     data_pipeline = pipeline_multimer.DataPipeline(

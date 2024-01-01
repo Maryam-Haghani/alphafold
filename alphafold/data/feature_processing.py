@@ -45,6 +45,18 @@ def _is_homomer_or_monomer(chains: Iterable[pipeline.FeatureDict]) -> bool:
        chain in chains])))
   return num_unique_chains == 1
 
+# convert a txt file to sto format
+def make_paired_msa_sto(paired_msa):
+    paired_msa = paired_msa.strip()
+    paired_sequences = paired_msa.split('\n')
+    for s in paired_sequences:
+        l = len(s)
+    paired_sequences_sto = ""
+    for i in range(0, len(paired_sequences) - 1, 2):
+        paired_sequences_sto += f"{paired_sequences[i]} {paired_sequences[i + 1]}\n"
+
+    return paired_sequences_sto
+
 # make paired query sequence when pairing is set to False
 def make_paired_query(np_chains_list):
     fasta_paired_sequence = "query_seq\t"
@@ -83,7 +95,12 @@ def process_features(
                 #read msa file and parse that based on Msa
                 paired_msa_format = precomputed_paired_msa_file.split('.')[-1]
                 paired_msa = pipeline.read_msa(paired_msa_format, precomputed_paired_msa_file)
-                paired_msa = parsers.parse_stockholm(paired_msa['sto'])
+                if paired_msa_format =='txt':
+                    paired_msa_sto = make_paired_msa_sto(paired_msa['txt'])
+                else:
+                    paired_msa_sto = paired_msa['sto']
+
+                paired_msa = parsers.parse_stockholm(paired_msa_sto)
                 np_chains_list = make_paired_msa_features(np_chains_list, paired_msa)
         else:
             # only pair query sequences
