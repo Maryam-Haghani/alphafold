@@ -83,6 +83,8 @@ binary_path = '/home/haghani/.conda/envs/alphafold/bin/'
 flags.DEFINE_string('data_dir', None, 'Path to directory of supporting data.')
 flags.DEFINE_string('output_dir', None, 'Path to a directory that will '
                     'store the results.')
+flags.DEFINE_string('prediction_dir', None, 'Path to a directory that will '
+                    'store the prediction results.')
 flags.DEFINE_string('jackhmmer_binary_path', binary_path+'jackhmmer',
                     'Path to the JackHMMER executable.')
 flags.DEFINE_string('hhblits_binary_path', binary_path+'hhblits',
@@ -211,6 +213,7 @@ def predict_structure(
     fasta_path: str,
     fasta_name: str,
     output_dir_base: str,
+    prediction_dir: str,
     data_pipeline: Union[pipeline.DataPipeline, pipeline_multimer.DataPipeline],
     model_runners: Dict[str, model.RunModel],
     amber_relaxer: relax.AmberRelaxation,
@@ -221,12 +224,16 @@ def predict_structure(
   logging.info('Predicting %s', fasta_name)
   timings = {}
   output_dir = os.path.join(output_dir_base, fasta_name)
-  if not os.path.exists(output_dir):
-    os.makedirs(output_dir)
-  msa_output_dir = os.path.join(output_dir, 'msas')
-  if not os.path.exists(msa_output_dir):
-    os.makedirs(msa_output_dir)
+  os.makedirs(output_dir, exist_ok=True)
 
+  if prediction_dir is not None:
+      current_prediction_dir = os.path.join(output_dir, prediction_dir)
+  else:
+      current_prediction_dir = output_dir
+  os.makedirs(current_prediction_dir, exist_ok=True)
+
+  msa_output_dir = os.path.join(output_dir, 'msas')
+  os.makedirs(msa_output_dir, exist_ok=True)
   # Get features.
   t_0 = time.time()
 
@@ -237,7 +244,7 @@ def predict_structure(
   timings['features'] = time.time() - t_0
 
   # Write out features as a pickled dictionary.
-  features_output_path = os.path.join(output_dir, 'features.pkl')
+  features_output_path = os.path.join(current_prediction_dir, 'features.pkl')
   with open(features_output_path, 'wb') as f:
     pickle.dump(feature_dict, f, protocol=4)
 
@@ -252,8 +259,7 @@ def predict_structure(
 
   # Run the models.
   num_models = len(model_runners)
-  for model_index, (model_name, model_runner) in enumerate(
-      model_runners.items()):
+  for model_index, (model_name, model_runner) in enumerate(model_runners.items()):
     logging.info('Running model %s on %s', model_name, fasta_name)
     t_0 = time.time()
     model_random_seed = model_index + random_seed * num_models
@@ -262,18 +268,15 @@ def predict_structure(
     timings[f'process_features_{model_name}'] = time.time() - t_0
 
     t_0 = time.time()
-    prediction_result = model_runner.predict(processed_feature_dict,
-                                             random_seed=model_random_seed)
+    prediction_result = model_runner.predict(processed_feature_dict, random_seed=model_random_seed)
     t_diff = time.time() - t_0
     timings[f'predict_and_compile_{model_name}'] = t_diff
-    logging.info(
-        'Total JAX model %s on %s predict time (includes compilation time, see --benchmark): %.1fs',
+    logging.info('Total JAX model %s on %s predict time (includes compilation time, see --benchmark): %.1fs',
         model_name, fasta_name, t_diff)
 
     if benchmark:
       t_0 = time.time()
-      model_runner.predict(processed_feature_dict,
-                           random_seed=model_random_seed)
+      model_runner.predict(processed_feature_dict, random_seed=model_random_seed)
       t_diff = time.time() - t_0
       timings[f'predict_benchmark_{model_name}'] = t_diff
       logging.info(
@@ -287,7 +290,7 @@ def predict_structure(
     np_prediction_result = _jnp_to_np(dict(prediction_result))
 
     # Save the model outputs.
-    result_output_path = os.path.join(output_dir, f'result_{model_name}.pkl')
+    result_output_path = os.path.join(current_prediction_dir, f'result_{model_name}.pkl')
     with open(result_output_path, 'wb') as f:
       pickle.dump(np_prediction_result, f, protocol=4)
 
@@ -303,7 +306,7 @@ def predict_structure(
 
     unrelaxed_proteins[model_name] = unrelaxed_protein
     unrelaxed_pdbs[model_name] = protein.to_pdb(unrelaxed_protein)
-    unrelaxed_pdb_path = os.path.join(output_dir, f'unrelaxed_{model_name}.pdb')
+    unrelaxed_pdb_path = os.path.join(current_prediction_dir, f'unrelaxed_{model_name}.pdb')
     with open(unrelaxed_pdb_path, 'w') as f:
       f.write(unrelaxed_pdbs[model_name])
 
@@ -337,7 +340,7 @@ def predict_structure(
         relaxed_pdbs[model_name] = relaxed_pdb_str
 
         # Save the relaxed PDB.
-        relaxed_output_path = os.path.join(output_dir, f'relaxed_{model_name}.pdb')
+        relaxed_output_path = os.path.join(current_prediction_dir, f'relaxed_{model_name}.pdb')
         with open(relaxed_output_path, 'w') as f:
           f.write(relaxed_pdb_str)
   except:
@@ -345,14 +348,14 @@ def predict_structure(
 
   # Write out relaxed PDBs in rank order.
   for idx, model_name in enumerate(ranked_order):
-    ranked_output_path = os.path.join(output_dir, f'ranked_{idx}.pdb')
+    ranked_output_path = os.path.join(current_prediction_dir, f'ranked_{idx}.pdb')
     with open(ranked_output_path, 'w') as f:
       if model_name in relaxed_pdbs:
         f.write(relaxed_pdbs[model_name])
       else:
         f.write(unrelaxed_pdbs[model_name])
 
-  ranking_output_path = os.path.join(output_dir, 'ranking_debug.json')
+  ranking_output_path = os.path.join(current_prediction_dir, 'ranking_debug.json')
   with open(ranking_output_path, 'w') as f:
     label = 'iptm+ptm' if 'iptm' in prediction_result else 'plddts'
     f.write(json.dumps(
@@ -360,11 +363,11 @@ def predict_structure(
 
   logging.info('Final timings for %s: %s', fasta_name, timings)
 
-  timings_output_path = os.path.join(output_dir, 'timings.json')
+  timings_output_path = os.path.join(current_prediction_dir, 'timings.json')
   with open(timings_output_path, 'w') as f:
     f.write(json.dumps(timings, indent=4))
   if models_to_relax != ModelsToRelax.NONE:
-    relax_metrics_path = os.path.join(output_dir, 'relax_metrics.json')
+    relax_metrics_path = os.path.join(current_prediction_dir, 'relax_metrics.json')
     with open(relax_metrics_path, 'w') as f:
       f.write(json.dumps(relax_metrics, indent=4))
 
@@ -528,6 +531,7 @@ def main(argv):
         fasta_path=path,
         fasta_name=fasta_name,
         output_dir_base=FLAGS.output_dir,
+        prediction_dir=FLAGS.prediction_dir,
         data_pipeline=data_pipeline,
         model_runners=model_runners,
         amber_relaxer=amber_relaxer,
@@ -538,14 +542,14 @@ def main(argv):
 
     if is_fasta_path_dir:
         # if FLAGS.only_features:
-        #     # move the fasta with MSAs generated to prediction folders
-        #     shutil.copy(path, '/projects/protein-structure-prediction/HostViralComplexes/Completed-Fastas-Pairing/')
-        #     shutil.copy(path, '/projects/protein-structure-prediction/HostViralComplexes/Completed-Fastas-NoPairing/')
-        #     shutil.copytree(f'/projects/protein-structure-prediction/HostViralComplexes/AF-Individual-MSAs/{fasta_name}',
-        #                 f'/projects/protein-structure-prediction/HostViralComplexes/Predictions/AF-Pairing/{fasta_name}')
-        #     shutil.copytree(f'/projects/protein-structure-prediction/HostViralComplexes/AF-Individual-MSAs/{fasta_name}',
-        #                 f'/projects/protein-structure-prediction/HostViralComplexes/Predictions/AF-NoPairing/{fasta_name}')
-        # delete the predicted fasta file from fasta folder
+            # move the fasta with MSAs generated to prediction folders
+            # shutil.copy(path, '/projects/protein-structure-prediction/HostViralComplexes/Completed-Fastas')
+            # shutil.copytree(f'/projects/protein-structure-prediction/HostViralComplexes/Predictions/NoPairing-Unrelaxed/{fasta_name}',
+            #             f'/projects/protein-structure-prediction/HostViralComplexes/Predictions/Pairing-Unrelaxed/{fasta_name}')
+
+            # shutil.copytree(f'/projects/protein-structure-prediction/HostViralComplexes/Predictions/NoPairing-Unrelaxed/{fasta_name}',
+            #             f'/projects/protein-structure-prediction/HostViralComplexes/Predictions/Pairing-Unrelaxed-HVDB/{fasta_name}')
+        #delete the predicted fasta file from fasta folder
         os.remove(path)
 
   logging.info("*************************END of CODE******************************")

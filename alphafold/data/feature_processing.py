@@ -94,7 +94,7 @@ def process_features(
             else:
                 #read msa file and parse that based on Msa
                 paired_msa_format = precomputed_paired_msa_file.split('.')[-1]
-                paired_msa = pipeline.read_msa(paired_msa_format, precomputed_paired_msa_file)
+                paired_msa = pipeline.read_msa(paired_msa_format, os.path.join(msa_output_dir, precomputed_paired_msa_file))
                 if paired_msa_format =='txt':
                     paired_msa_sto = make_paired_msa_sto(paired_msa['txt'])
                 else:
