@@ -180,6 +180,7 @@ class DataPipeline:
                use_precomputed_paired_msa: bool = False,
                precomputed_paired_msa_file: str = '',
                save_chain_msa = False,
+               save_paired_msa=False,
                save_multimer_msa= False
                ):
     """Initializes the data pipeline.
@@ -196,6 +197,7 @@ class DataPipeline:
       use_precomputed_paired_msa: Whether to use pre-existing paired-MSA
       precomputed_paired_msa_file
       save_chain_msa: Whether to save pairing msa
+      save_paired_msa: Whether to save paired msa
       save_multimer_msa: Whether to save final msa of multimer
     """
     self._monomer_data_pipeline = monomer_data_pipeline
@@ -208,6 +210,7 @@ class DataPipeline:
     self.use_precomputed_paired_msa = use_precomputed_paired_msa
     self.precomputed_paired_msa_file = precomputed_paired_msa_file
     self.save_chain_msa = save_chain_msa
+    self.save_paired_msa = save_paired_msa
     self.save_multimer_msa = save_multimer_msa
 
   def _process_single_chain(
@@ -255,7 +258,8 @@ class DataPipeline:
 
   def process(self,
               input_fasta_path: str,
-              msa_output_dir: str) -> pipeline.FeatureDict:
+              msa_output_dir: str,
+              prediction_dir: str) -> pipeline.FeatureDict:
     """Runs alignment tools on the input sequences and creates features."""
     with open(input_fasta_path) as f:
       input_fasta_str = f.read()
@@ -292,9 +296,11 @@ class DataPipeline:
 
     np_example = feature_processing.process_features(all_chain_features=all_chain_features,
                                                      msa_output_dir=msa_output_dir,
+                                                     prediction_dir=prediction_dir,
                                                      use_pairing= self.use_pairing,
                                                      use_precomputed_paired_msa = self.use_precomputed_paired_msa,
                                                      precomputed_paired_msa_file = self.precomputed_paired_msa_file,
+                                                     save_paired_msa = self.save_paired_msa,
                                                      save_multimer_msa = self.save_multimer_msa)
 
     # Pad MSA to avoid zero-sized extra_msa.

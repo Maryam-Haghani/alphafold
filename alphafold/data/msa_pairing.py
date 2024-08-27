@@ -53,7 +53,7 @@ CHAIN_FEATURES = ('num_alignments', 'seq_length')
 
 
 def create_paired_features(
-    chains: Iterable[pipeline.FeatureDict], msa_output_dir) ->  List[pipeline.FeatureDict]:
+    chains: Iterable[pipeline.FeatureDict], msa_output_dir, save_paired_msa) ->  List[pipeline.FeatureDict]:
   """Returns the original chains with paired NUM_SEQ features.
 
   Args:
@@ -76,7 +76,8 @@ def create_paired_features(
     paired_chains_to_paired_row_indices = pair_sequences(chains, pair_dir)
     paired_rows = reorder_paired_rows(paired_chains_to_paired_row_indices)
 
-    _save_paired_msa(chains, pair_dir, paired_rows)
+    if save_paired_msa:
+        _save_paired_msa(chains, pair_dir, paired_rows)
 
     for chain_num, chain in enumerate(chains):
       new_chain = {k: v for k, v in chain.items() if '_all_seq' not in k}
@@ -104,18 +105,18 @@ def _save_paired_msa(chains, pair_dir, paired_rows):
         sequences += df_paired_msa[f"seq_original_msa_{chain['chain_id']}"]
         species_ids = df_paired_msa[f"msa_species_identifiers_{chain['chain_id']}"]
 
-    df_paired_msa.to_csv(f'{pair_dir}/final_paired_msa.csv', index=False)
+    df_paired_msa.to_csv(f'{pair_dir}/af_paired_msa.csv', index=False)
 
-    with open(f'{pair_dir}/final_paired_result.sto', 'w') as f:
+    with open(f'{pair_dir}/af_paired_msa.sto', 'w') as f:
         f.writelines('# STOCKHOLM 1.0\n\n')
 
         for i in range(len(sequences)):
-            f.writelines(f'#=GS OX:{species_ids[i]}\n')
+            f.writelines(f'#=GS OX:{species_ids[i]}_{i+1}\n')
 
         f.writelines(f'\n')
 
         for i in range(len(sequences)):
-            f.writelines(f'OX:{species_ids[i]}\t')
+            f.writelines(f'OX:{species_ids[i]}_{i+1}\t')
             f.writelines(f'{sequences[i]}\n')
         f.close()
 

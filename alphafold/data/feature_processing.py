@@ -66,17 +66,19 @@ def make_paired_query(np_chains_list):
 
 
 def process_features(
-    all_chain_features: MutableMapping[str, pipeline.FeatureDict], msa_output_dir, use_pairing,
-        use_precomputed_paired_msa, precomputed_paired_msa_file, save_multimer_msa
+    all_chain_features: MutableMapping[str, pipeline.FeatureDict], msa_output_dir, prediction_dir, use_pairing,
+        use_precomputed_paired_msa, precomputed_paired_msa_file, save_paired_msa, save_multimer_msa
     ) -> pipeline.FeatureDict:
     """Runs processing on features to augment, pair and merge.
 
     Args:
       all_chain_features: A MutableMap of dictionaries of features for each chain.
       msa_output_dir
+      prediction_dir
       use_pairing
       use_precomputed_paired_msa
       precomputed_paired_msa_file
+      save_paired_msa
       save_multimer_msa
     Returns:
       A dictionary of features.
@@ -90,7 +92,8 @@ def process_features(
         if use_pairing:
             if not use_precomputed_paired_msa:
                 np_chains_list = msa_pairing.create_paired_features(
-                    chains=np_chains_list, msa_output_dir=msa_output_dir)
+                    chains=np_chains_list, msa_output_dir=msa_output_dir, save_paired_msa=save_paired_msa)
+
             else:
                 #read msa file and parse that based on Msa
                 paired_msa_format = precomputed_paired_msa_file.split('.')[-1]
@@ -127,7 +130,7 @@ def process_features(
     np_example['seq_msa'] = np.array(seq_msa)
 
     if save_multimer_msa:
-        with open(os.path.join(msa_output_dir, 'final_msa.aln'), 'w') as f:
+        with open(os.path.join(prediction_dir, 'final_msa.aln'), 'w') as f:
             for seq in np_example['seq_msa']:
                 f.write(''.join(map(str, seq)) + '\n')
 
@@ -236,6 +239,7 @@ def _crop_single_chain(chain: pipeline.FeatureDict,
     # sequence from this chain's MSA is included in the paired MSA.  This keeps
     # the MSA size for each chain roughly constant.
     msa_all_seq = chain['msa_all_seq'][:msa_crop_size_all_seq, :]
+    # Return the count of paired sequences in the MSA that have at least one non-gap position.
     num_non_gapped_pairs = np.sum(np.any(msa_all_seq != msa_pairing.MSA_GAP_IDX, axis=1))
     num_non_gapped_pairs = np.minimum(num_non_gapped_pairs, msa_crop_size_all_seq)
 

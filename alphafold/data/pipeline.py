@@ -103,7 +103,7 @@ def make_msa_features(msas: Sequence[parsers.Msa], msa_output_dir, file_name, sa
   save_msa_properties(msa_props, supplementary_path, file_name)
 
   if save_chain_msa:
-      save_chain_msa_to_file(features, supplementary_path, file_name)
+      save_chain_msa_to_file(features, msa_output_dir, file_name)
   return features
 
 
@@ -151,15 +151,15 @@ def save_msa_properties(msa_props, supplementary_path, file_name):
   with open(os.path.join(supplementary_path, f"{file_name}_props.txt"), 'w') as outfile:
       json.dump(msa_props, outfile)
 
-def save_chain_msa_to_file(msa_features, msa_supplementary_dir, file_name):
+def save_chain_msa_to_file(msa_features, msa_dir, file_name):
   msa_df_to_save = pd.DataFrame({
       'msa': [" ".join([str(res) for res in seq]) for seq in msa_features['msa']],
       'seq_msa': msa_features['seq_msa'],
       'msa_species_identifiers': msa_features['msa_species_identifiers']
   })
-  msa_df_to_save.to_csv(os.path.join(msa_supplementary_dir, f"final_{file_name}.csv"), index=False)
+  msa_df_to_save.to_csv(os.path.join(msa_dir, f"final_{file_name}.csv"), index=False)
 
-  file_msa = os.path.join(msa_supplementary_dir, f"final_{file_name}.aln")
+  file_msa = os.path.join(msa_dir, f"final_{file_name}.aln")
   with open(file_msa, 'w') as file:
       for item in msa_features['seq_msa']:
           file.write(str(item) + '\n')

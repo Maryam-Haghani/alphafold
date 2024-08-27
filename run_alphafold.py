@@ -165,6 +165,7 @@ flags.DEFINE_boolean('use_pairing', True, 'Whether to pair MSAs'
 flags.DEFINE_boolean('use_precomputed_paired_msa', False, 'Whether to read paired MSA'
                      'instead of computing that based of uniprot')
 flags.DEFINE_string('precomputed_paired_msa_file', '', 'path of paired msa file which is in sto format')
+flags.DEFINE_boolean('save_paired_msa', True, 'Whether to save paired MSA file when using default MSA Pairing')
 flags.DEFINE_boolean('save_multimer_msa', False, 'Whether to save final MSA file for multimers')
 
 flags.DEFINE_enum_class('models_to_relax', ModelsToRelax.TOP5, ModelsToRelax,
@@ -239,7 +240,8 @@ def predict_structure(
 
   feature_dict = data_pipeline.process(
       input_fasta_path=fasta_path,
-      msa_output_dir=msa_output_dir
+      msa_output_dir=msa_output_dir,
+      prediction_dir=current_prediction_dir
   )
   timings['features'] = time.time() - t_0
 
@@ -401,8 +403,8 @@ def main(argv):
 
   run_monomer_system = 'monomer' in FLAGS.model_preset
 # for monomers
-  _check_flag('pdb70_database_path', 'model_preset',
-              should_be_set=not run_multimer_system)
+#   _check_flag('pdb70_database_path', 'model_preset',
+#               should_be_set=not run_multimer_system)
 
   _check_flag('precomputed_paired_msa_file', 'use_precomputed_paired_msa',
               should_be_set=FLAGS['use_precomputed_paired_msa'].value)
@@ -471,6 +473,7 @@ def main(argv):
         use_precomputed_paired_msa = FLAGS.use_precomputed_paired_msa,
         precomputed_paired_msa_file = FLAGS.precomputed_paired_msa_file,
         save_chain_msa= FLAGS.save_chain_msa,
+        save_paired_msa=FLAGS.save_paired_msa,
         save_multimer_msa= FLAGS.save_multimer_msa
     )
   else:
